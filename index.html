@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GF(2^m) Polynomial Arithmetic Calculator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>GF(2<sup>m</sup>) Polynomial Arithmetic</h1>
+      <p class="subtitle">EECE 455/632 &mdash; Cryptography &amp; Network Security</p>
+    </header>
+
+    <!-- Field Configuration -->
+    <section class="config-bar">
+      <div class="config-group">
+        <label>Field Degree <em>m</em></label>
+        <div class="degree-selector">
+          <div class="btn-group" id="degree-btns"></div>
+          <input type="number" id="degree-input" min="2" max="128" value="8" title="Custom degree (2-128)">
+        </div>
+      </div>
+      <div class="config-group">
+        <label>I/O Format</label>
+        <div class="toggle-switch" id="format-toggle">
+          <button class="active" data-format="bin">Binary</button>
+          <button data-format="hex">Hex</button>
+          <button data-format="poly">Polynomial</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Irreducible Polynomial -->
+    <section class="irr-section">
+      <div class="irr-header">
+        <span class="irr-label">Irreducible Polynomial</span>
+        <button class="icon-btn" id="irr-reset" title="Reset to default for current degree">&#x21BA; Reset</button>
+      </div>
+      <input type="text" class="irr-input" id="irr-input" spellcheck="false" autocomplete="off">
+      <div class="irr-preview" id="irr-preview"></div>
+      <div class="irr-error" id="irr-error"></div>
+    </section>
+
+    <!-- Polynomial Inputs -->
+    <section class="inputs-section">
+      <div class="input-card" id="card-a">
+        <div class="input-label">Polynomial A</div>
+        <input type="text" id="input-a" autocomplete="off" spellcheck="false">
+        <div class="input-preview" id="preview-a">Enter a value</div>
+        <div class="input-error" id="error-a"></div>
+      </div>
+
+      <button class="swap-btn" id="swap-btn" title="Swap A and B">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>
+        </svg>
+      </button>
+
+      <div class="input-card" id="card-b">
+        <div class="input-label">Polynomial B</div>
+        <input type="text" id="input-b" autocomplete="off" spellcheck="false">
+        <div class="input-preview" id="preview-b">Enter a value</div>
+        <div class="input-error" id="error-b"></div>
+      </div>
+    </section>
+
+    <!-- Operation Buttons -->
+    <section class="ops-section">
+      <button class="op-btn" data-op="add"><span class="op-symbol">+</span> Addition</button>
+      <button class="op-btn" data-op="sub"><span class="op-symbol">&minus;</span> Subtraction</button>
+      <button class="op-btn" data-op="mul"><span class="op-symbol">&times;</span> Multiplication</button>
+      <button class="op-btn" data-op="div"><span class="op-symbol">&divide;</span> Division</button>
+      <button class="op-btn single" data-op="mod"><span class="op-symbol">%</span> Mod Reduce</button>
+      <button class="op-btn single" data-op="inv"><span class="op-symbol">x<sup>-1</sup></span> Inverse</button>
+    </section>
+
+    <!-- Result Display -->
+    <section class="result-section hidden" id="result-section">
+      <div class="result-header">
+        <h3 id="result-title">Result</h3>
+        <div class="result-actions">
+          <button class="small-btn" id="use-as-a" title="Copy result into A">&#x2192; A</button>
+          <button class="small-btn" id="use-as-b" title="Copy result into B">&#x2192; B</button>
+        </div>
+      </div>
+      <div class="result-value" id="result-value"></div>
+      <div class="result-poly" id="result-poly"></div>
+      <div class="result-alt" id="result-alt"></div>
+    </section>
+
+    <!-- Step-by-Step Breakdown -->
+    <section class="steps-section hidden" id="steps-section">
+      <h3>Step-by-Step Breakdown</h3>
+      <div class="steps-timeline" id="steps-container"></div>
+    </section>
+
+    <footer>
+      <p>Galois Field GF(2<sup>m</sup>) &mdash; All arithmetic performed over polynomials with coefficients in {0, 1}</p>
+    </footer>
+  </div>
+
+  <script src="gf_arithmetic.js"></script>
+</body>
+</html>

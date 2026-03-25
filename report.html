@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Project Report - GF(2^m) Polynomial Arithmetic Calculator</title>
+  <style>
+    @page { size: A4; margin: 20mm 18mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      color: #1a1a2e; line-height: 1.65; font-size: 11.5pt; background: #fff;
+    }
+    .page { max-width: 780px; margin: 0 auto; padding: 40px 32px; }
+
+    /* Cover */
+    .cover {
+      text-align: center; padding: 100px 20px 60px;
+      page-break-after: always;
+    }
+    .cover-logo { font-size: 44pt; font-weight: 800; color: #3b82f6; }
+    .cover-logo sup { font-size: 0.5em; vertical-align: super; }
+    .cover h1 { font-size: 20pt; font-weight: 700; margin-top: 10px; }
+    .cover .course { font-size: 13pt; color: #6366f1; font-weight: 600; margin: 6px 0 30px; }
+    .cover-line { width: 80px; height: 3px; background: linear-gradient(90deg,#3b82f6,#06b6d4); border-radius: 2px; margin: 0 auto 30px; }
+    .cover-meta { font-size: 11pt; color: #64748b; line-height: 2; }
+
+    /* Headings */
+    h2 {
+      font-size: 14pt; font-weight: 700; color: #1e293b;
+      margin-top: 28px; margin-bottom: 10px; padding-bottom: 4px;
+      border-bottom: 2px solid #3b82f6; page-break-after: avoid;
+    }
+    h3 { font-size: 12pt; font-weight: 700; color: #334155; margin-top: 16px; margin-bottom: 6px; }
+    p { margin-bottom: 8px; text-align: justify; }
+    ul, ol { margin: 4px 0 10px 22px; }
+    li { margin-bottom: 3px; }
+    code {
+      font-family: Consolas, monospace; background: #f1f5f9;
+      padding: 1px 4px; border-radius: 3px; font-size: 0.9em; color: #6366f1;
+    }
+    table {
+      width: 100%; border-collapse: collapse; margin: 8px 0 14px;
+      font-size: 10.5pt; page-break-inside: avoid;
+    }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 700; color: #334155; }
+    tr:nth-child(even) { background: #f8fafc; }
+    .box {
+      background: #eff6ff; border-left: 3px solid #3b82f6;
+      padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 10px 0;
+    }
+    .box.green { background: #f0fdf4; border-left-color: #10b981; }
+    footer.rf {
+      margin-top: 30px; padding-top: 12px; border-top: 1px solid #e2e8f0;
+      text-align: center; font-size: 9pt; color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-logo">GF(2<sup>m</sup>)</div>
+  <div class="cover-line"></div>
+  <h1>Polynomial Arithmetic Calculator</h1>
+  <p class="course">EECE 455/632 &mdash; Cryptography &amp; Network Security</p>
+  <div class="cover-meta">
+    <p>Project Report &bull; March 2026</p>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div class="page">
+
+  <h2>1. Introduction</h2>
+  <p>
+    This report presents the <strong>GF(2<sup>m</sup>) Polynomial Arithmetic Calculator</strong>, a web-based tool built for EECE 455/632. It allows users to perform and visualize polynomial operations within Galois Fields of characteristic 2, which are fundamental to cryptographic systems like AES and elliptic curve cryptography. The application is a client-side Single Page Application using pure HTML, CSS, and JavaScript with zero external dependencies &mdash; it runs by simply opening <code>index.html</code> in any modern browser.
+  </p>
+
+  <h2>2. Features Implemented</h2>
+  <p>The calculator implements six GF(2<sup>m</sup>) operations:</p>
+  <table>
+    <tr><th>Operation</th><th>Symbol</th><th>Algorithm</th></tr>
+    <tr><td>Addition</td><td>&oplus;</td><td>Bitwise XOR of two polynomials</td></tr>
+    <tr><td>Subtraction</td><td>&ominus;</td><td>Same as addition (in GF(2), &minus;1 = 1)</td></tr>
+    <tr><td>Multiplication</td><td>&times;</td><td>Shift-and-XOR + modular reduction</td></tr>
+    <tr><td>Division</td><td>&divide;</td><td>A &times; B<sup>&minus;1</sup> using Extended Euclidean Algorithm</td></tr>
+    <tr><td>Mod Reduce</td><td>%</td><td>Iterative XOR reduction to degree &lt; m</td></tr>
+    <tr><td>Inverse</td><td>x<sup>&minus;1</sup></td><td>Extended Euclidean Algorithm with verification</td></tr>
+  </table>
+
+  <p><strong>Additional features include:</strong></p>
+  <ul>
+    <li><strong>Configurable field degree</strong> (m = 2 to 128) with quick-select buttons for m = 2&ndash;8 and a custom input field</li>
+    <li><strong>Three I/O formats:</strong> Binary, Hexadecimal, and Polynomial notation &mdash; values auto-convert when switching formats</li>
+    <li><strong>Irreducible polynomial management:</strong> 15 pre-loaded defaults (m = 2&ndash;16), editable input with real-time degree validation, and a reset button</li>
+    <li><strong>Step-by-step breakdown:</strong> Every operation generates a detailed trace of each intermediate computation step</li>
+    <li><strong>Swap button</strong> to exchange inputs A and B; <strong>copy-to-input buttons</strong> to feed results back for chained operations</li>
+    <li><strong>Live preview</strong> below each input showing the polynomial (or binary/hex) equivalent as the user types</li>
+  </ul>
+
+  <h2>3. Architecture &amp; How It Works</h2>
+
+  <h3>3.1 Project Structure</h3>
+  <p>The entire application is three files (~1,572 lines total):</p>
+  <ul>
+    <li><code>index.html</code> (106 lines) &mdash; Page structure and layout</li>
+    <li><code>style.css</code> (671 lines) &mdash; Theming, responsive layout, animations</li>
+    <li><code>gf_arithmetic.js</code> (795 lines) &mdash; Math engine, parser, and UI controller</li>
+  </ul>
+  <p>There is no backend, database, or external API. All computation happens client-side in the browser.</p>
+
+  <h3>3.2 Polynomial Representation</h3>
+  <p>
+    Polynomials are represented as JavaScript <code>BigInt</code> bit-vectors, where each bit position corresponds to a coefficient. For example, x<sup>4</sup> + x<sup>2</sup> + 1 = <code>10101</code> in binary = <code>21n</code> as a BigInt. Using BigInt allows support for degrees up to 128 without precision issues.
+  </p>
+
+  <h3>3.3 Data Flow</h3>
+  <div class="box">
+    <strong>User types input</strong> &rarr; Format-aware parser converts string to BigInt &rarr; Validation (degree, format, irreducible poly) &rarr; Operation executes while recording steps &rarr; Result rendered in all formats + step timeline displayed
+  </div>
+
+  <h3>3.4 State Management</h3>
+  <p>
+    A singleton <code>App</code> object holds four state values: the field degree <code>m</code>, the current I/O format, the irreducible polynomial, and the last result. All state changes propagate immediately to the DOM &mdash; changing degree reloads the default irreducible polynomial and clears results; switching format re-displays existing values.
+  </p>
+
+  <h3>3.5 Input Parsing</h3>
+  <p>
+    The parser accepts flexible polynomial notation: <code>x^4 + x^2 + 1</code>, <code>x4+x2+1</code>, <code>3x^3 + 2x + 1</code> (coefficients auto-reduced mod 2), and even pasted Unicode superscripts like x&#8308;. Subtraction signs are treated as addition (since &minus;1 = 1 in GF(2)). Binary and hex inputs are validated with strict character checks.
+  </p>
+
+  <h2>4. UI Design</h2>
+  <p>
+    The interface uses a <strong>dark-mode</strong> theme with a blue accent color palette, defined through 20+ CSS custom properties for consistency. The layout is organized vertically: header, configuration bar, irreducible polynomial section, two input cards with a swap button, operation buttons in a grid, result display, and step-by-step timeline.
+  </p>
+  <p><strong>Key design choices:</strong></p>
+  <ul>
+    <li><strong>Typography:</strong> System sans-serif for UI, monospace (Cascadia Code/Consolas) for binary/hex values, and math serif (Cambria Math) for polynomial notation</li>
+    <li><strong>Responsive:</strong> Single breakpoint at 640px &mdash; inputs and config stack vertically on mobile, operation grid switches from 4 to 3 columns</li>
+    <li><strong>Visual feedback:</strong> Slide-in animations for results, hover lift on buttons, blue glow focus rings, color-coded step labels (yellow = section headers, green = final result, red = errors)</li>
+    <li><strong>Scrollable step timeline</strong> with a custom thin scrollbar for long computation traces</li>
+  </ul>
+
+  <h2>5. Validation &amp; Error Handling</h2>
+  <p>
+    The application validates at multiple levels: format-specific input characters, polynomial degree vs. field degree (warns if degree &ge; m), irreducible polynomial degree match, division/inverse of zero detection, and GCD checks during inverse computation. Errors appear contextually &mdash; below the relevant input field or in the result section with red styling.
+  </p>
+
+  <div class="box green">
+    <strong>Summary:</strong> 3 source files &bull; ~1,572 lines of code &bull; 6 arithmetic operations &bull; 3 I/O formats &bull; GF(2<sup>2</sup>) through GF(2<sup>128</sup>) support &bull; 15 pre-loaded irreducible polynomials &bull; Step-by-step breakdowns &bull; Responsive dark-mode UI &bull; Zero dependencies
+  </div>
+
+  <footer class="rf">
+    GF(2<sup>m</sup>) Polynomial Arithmetic Calculator &mdash; EECE 455/632 &mdash; Project Report
+  </footer>
+</div>
+
+</body>
+</html>
