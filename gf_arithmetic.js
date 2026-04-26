@@ -703,6 +703,19 @@ function tokenizeFormula(str) {
       continue;
     }
 
+    if (Object.prototype.hasOwnProperty.call(SUP_MAP, ch)) {
+      let j = i;
+      let digits = '';
+      while (j < str.length && Object.prototype.hasOwnProperty.call(SUP_MAP, str[j])) {
+        digits += SUP_MAP[str[j]];
+        j++;
+      }
+      tokens.push({ type: '^', value: '^' });
+      tokens.push({ type: 'intnum', value: digits });
+      i = j;
+      continue;
+    }
+
     if ('()+-'.includes(ch)) {
       tokens.push({ type: ch, value: ch });
       i++;
@@ -1201,6 +1214,7 @@ const App = {
 
     // Formula constructor
     document.getElementById('formula-input').addEventListener('input', () => this.onFormulaInput());
+    this.bindPolynomialTyping(document.getElementById('formula-input'), () => true);
     document.getElementById('formula-eval').addEventListener('click', () => this.computeFormula());
     document.getElementById('formula-clear').addEventListener('click', () => this.clearFormula());
     document.getElementById('formula-undo').addEventListener('click', () => this.undoFormula());
@@ -1889,7 +1903,7 @@ const App = {
 
     error.textContent = '';
     if (formula === '') {
-      preview.textContent = 'Use your variables with +, xor, *, /, inv(...), and parentheses.';
+      preview.textContent = '';
       preview.style.color = 'var(--text-muted)';
       return;
     }
@@ -2078,11 +2092,13 @@ const App = {
   // ===================== COLLAPSIBLE SECTIONS =====================
 
   bindCollapsibles() {
-    document.querySelectorAll('.collapse-toggle').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const section = btn.closest('.collapsible-section');
-        if (section) section.classList.toggle('collapsed');
-      });
+    if (this.collapsiblesBound) return;
+    this.collapsiblesBound = true;
+    document.addEventListener('click', event => {
+      const btn = event.target.closest('.collapse-toggle');
+      if (!btn) return;
+      const section = btn.closest('.collapsible-section');
+      if (section) section.classList.toggle('collapsed');
     });
   },
 
@@ -2807,17 +2823,23 @@ const App = {
     // Generator orbit panel for small m
     if (this.m <= 8) {
       const orbit = document.createElement('div');
-      orbit.className = 'orbit-panel';
+      orbit.className = 'orbit-panel collapsible-section';
       orbit.innerHTML = `
-        <div class="orbit-controls">
-          <label>Generator g (poly)</label>
-          <input type="text" id="orbit-g" value="x" autocomplete="off" spellcheck="false">
-          <span class="orbit-info" id="orbit-info"></span>
+        <div class="section-heading collapsible-header orbit-header">
+          <button class="collapse-toggle" data-target="orbit-body" type="button" title="Collapse / expand">&#x25BC;</button>
+          <span>Generator g</span>
+          <span class="section-hint" id="orbit-info"></span>
         </div>
-        <div class="orbit-svg-wrap">
-          <svg class="orbit-svg" id="orbit-svg" viewBox="0 0 360 360" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="collapsible-body" id="orbit-body">
+          <div class="orbit-controls">
+            <label for="orbit-g">Polynomial</label>
+            <input type="text" id="orbit-g" value="x" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="orbit-svg-wrap">
+            <svg class="orbit-svg" id="orbit-svg" viewBox="0 0 360 360" xmlns="http://www.w3.org/2000/svg"></svg>
+          </div>
+          <div class="orbit-note">Click a point to see g<sup>k</sup>. Green dot is the identity (1).</div>
         </div>
-        <div class="orbit-note">Click a point to see g<sup>k</sup>. Green dot is the identity (1).</div>
       `;
       container.appendChild(orbit);
       const input = orbit.querySelector('#orbit-g');
