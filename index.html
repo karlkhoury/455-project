@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GF(2^m) Polynomial Arithmetic Calculator</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <link rel="stylesheet" href="style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 </head>
 <body>
   <div class="app">
@@ -18,16 +20,8 @@
       <div class="config-group">
         <label>Field Degree <em>m</em></label>
         <div class="degree-selector">
-          <div class="btn-group" id="degree-btns"></div>
-          <input type="number" id="degree-input" min="2" max="128" value="8" title="Custom degree (2-128)">
-        </div>
-      </div>
-      <div class="config-group">
-        <label>I/O Format</label>
-        <div class="toggle-switch" id="format-toggle">
-          <button class="active" data-format="bin">Binary</button>
-          <button data-format="hex">Hex</button>
-          <button data-format="poly">Polynomial</button>
+          <select id="degree-select" title="Choose field degree"></select>
+          <input type="number" id="degree-input" class="hidden" min="2" max="571" value="8" title="Custom degree (2-571)">
         </div>
       </div>
     </section>
@@ -35,45 +29,56 @@
     <!-- Irreducible Polynomial -->
     <section class="irr-section">
       <div class="irr-header">
-        <span class="irr-label">Irreducible Polynomial</span>
-        <button class="icon-btn" id="irr-reset" title="Reset to default for current degree">&#x21BA; Reset</button>
+        <span class="irr-label">Modulus Polynomial</span>
+        <button class="icon-btn" id="irr-reset" title="Reset to standard or generated modulus">&#x21BA; Reset</button>
       </div>
-      <input type="text" class="irr-input" id="irr-input" spellcheck="false" autocomplete="off">
+      <div class="modulus-dropdown" id="modulus-dropdown">
+        <button class="modulus-dropdown-btn" id="modulus-dropdown-btn" type="button"></button>
+        <div class="modulus-dropdown-menu hidden" id="modulus-dropdown-menu"></div>
+      </div>
       <div class="irr-preview" id="irr-preview"></div>
+      <div class="custom-modulus-row">
+        <input type="text" class="irr-input" id="irr-input" spellcheck="false" autocomplete="off">
+        <button class="eval-btn" id="irr-custom" type="button">Use Custom</button>
+      </div>
+      <div class="field-note">Different irreducible polynomials of the same degree define isomorphic fields, but bit-level multiplication, inverses, and division results may differ.</div>
       <div class="irr-error" id="irr-error"></div>
     </section>
 
-    <!-- Polynomial Inputs -->
-    <section class="inputs-section">
-      <div class="input-card" id="card-a">
-        <div class="input-label">Polynomial A</div>
-        <input type="text" id="input-a" autocomplete="off" spellcheck="false">
-        <div class="input-preview" id="preview-a">Enter a value</div>
-        <div class="input-error" id="error-a"></div>
+    <!-- Formula Variables -->
+    <section class="variables-section">
+      <div class="section-heading">
+        <span>Formula Variables</span>
       </div>
-
-      <button class="swap-btn" id="swap-btn" title="Swap A and B">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>
-        </svg>
+      <div class="variables-list" id="variables-list"></div>
+      <button class="add-variable-btn" id="add-variable" type="button">
+        <span>+</span> Add Variable
       </button>
-
-      <div class="input-card" id="card-b">
-        <div class="input-label">Polynomial B</div>
-        <input type="text" id="input-b" autocomplete="off" spellcheck="false">
-        <div class="input-preview" id="preview-b">Enter a value</div>
-        <div class="input-error" id="error-b"></div>
-      </div>
     </section>
 
-    <!-- Operation Buttons -->
-    <section class="ops-section">
-      <button class="op-btn" data-op="add"><span class="op-symbol">+</span> Addition</button>
-      <button class="op-btn" data-op="sub"><span class="op-symbol">&minus;</span> Subtraction</button>
-      <button class="op-btn" data-op="mul"><span class="op-symbol">&times;</span> Multiplication</button>
-      <button class="op-btn" data-op="div"><span class="op-symbol">&divide;</span> Division</button>
-      <button class="op-btn single" data-op="mod"><span class="op-symbol">%</span> Mod Reduce</button>
-      <button class="op-btn single" data-op="inv"><span class="op-symbol">x<sup>-1</sup></span> Inverse</button>
+    <!-- Formula Constructor -->
+    <section class="formula-section">
+      <div class="section-heading">
+        <span>Formula Constructor</span>
+        <div class="formula-actions">
+          <button class="icon-btn formula-tool-btn" id="formula-undo" title="Undo formula edit" type="button">&#x21B6;</button>
+          <button class="icon-btn formula-tool-btn" id="formula-redo" title="Redo formula edit" type="button">&#x21B7;</button>
+          <button class="icon-btn formula-tool-btn" id="formula-paste" title="Paste into formula" type="button">Paste</button>
+          <div class="mini-format-toggle" id="result-format-toggle" title="Result format">
+            <button class="active" data-format="bin" type="button">Bin.</button>
+            <button data-format="hex" type="button">Hex</button>
+            <button data-format="poly" type="button">Poly</button>
+          </div>
+          <button class="icon-btn" id="formula-clear" title="Clear formula">Clear</button>
+        </div>
+      </div>
+      <div class="formula-row">
+        <input type="text" id="formula-input" autocomplete="off" spellcheck="false" placeholder="e.g. (A + B) * inv(C)">
+        <button class="eval-btn" id="formula-eval">Evaluate</button>
+      </div>
+      <div class="formula-toolbar"></div>
+      <div class="formula-preview" id="formula-preview">Use your variables with +, xor, *, /, inv(...), and parentheses.</div>
+      <div class="formula-error" id="formula-error"></div>
     </section>
 
     <!-- Result Display -->
@@ -81,8 +86,8 @@
       <div class="result-header">
         <h3 id="result-title">Result</h3>
         <div class="result-actions">
-          <button class="small-btn" id="use-as-a" title="Copy result into A">&#x2192; A</button>
-          <button class="small-btn" id="use-as-b" title="Copy result into B">&#x2192; B</button>
+          <button class="small-btn" id="copy-result" title="Copy displayed result">Copy</button>
+          <button class="small-btn" id="use-as-var" title="Copy result into a new variable">&#x2192; Variable</button>
         </div>
       </div>
       <div class="result-value" id="result-value"></div>
