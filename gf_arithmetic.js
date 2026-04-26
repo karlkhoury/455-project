@@ -178,6 +178,16 @@ function polyFromExponents(exponents) {
   return p;
 }
 
+function naturalWidth(...values) {
+  let max = 1;
+  for (const v of values) {
+    if (typeof v !== 'bigint') continue;
+    const w = v === 0n ? 1 : v.toString(2).length;
+    if (w > max) max = w;
+  }
+  return max;
+}
+
 function primeDivisors(n) {
   const result = [];
   let x = n;
@@ -394,20 +404,22 @@ function searchSparseIrreducible(m) {
 
 function opAdd(a, b, m, irr) {
   const steps = [];
-  steps.push({ label: 'Operation', text: `${polyStr(a)}  \u2295  ${polyStr(b)}`, section: true });
-  steps.push({ label: 'Binary XOR', text: `${toBin(a, m)} \u2295 ${toBin(b, m)}` });
   const result = a ^ b;
-  steps.push({ label: 'Result', text: `${toBin(result, m)}  =  ${polyStr(result)}`, highlight: true });
+  const w = naturalWidth(a, b, result);
+  steps.push({ label: 'Operation', text: `${polyStr(a)}  \u2295  ${polyStr(b)}`, section: true });
+  steps.push({ label: 'Binary XOR', text: `${toBin(a, w)} \u2295 ${toBin(b, w)}` });
+  steps.push({ label: 'Result', text: `${toBin(result, w)}  =  ${polyStr(result)}`, highlight: true });
   return { result, steps };
 }
 
 function opSub(a, b, m, irr) {
   const steps = [];
+  const result = a ^ b;
+  const w = naturalWidth(a, b, result);
   steps.push({ label: 'Operation', text: `${polyStr(a)}  \u2296  ${polyStr(b)}`, section: true });
   steps.push({ label: 'Note', text: 'In GF(2), subtraction is identical to addition (XOR)', section: true });
-  steps.push({ label: 'Binary XOR', text: `${toBin(a, m)} \u2295 ${toBin(b, m)}` });
-  const result = a ^ b;
-  steps.push({ label: 'Result', text: `${toBin(result, m)}  =  ${polyStr(result)}`, highlight: true });
+  steps.push({ label: 'Binary XOR', text: `${toBin(a, w)} \u2295 ${toBin(b, w)}` });
+  steps.push({ label: 'Result', text: `${toBin(result, w)}  =  ${polyStr(result)}`, highlight: true });
   return { result, steps };
 }
 
@@ -418,7 +430,7 @@ function opMod(a, m, irr) {
 
   if (degree(a) < m) {
     steps.push({ label: 'No reduction', text: `Degree ${degree(a)} < ${m}, already in the field` });
-    steps.push({ label: 'Result', text: `${toBin(a, m)}  =  ${polyStr(a)}`, highlight: true });
+    steps.push({ label: 'Result', text: `${toBin(a)}  =  ${polyStr(a)}`, highlight: true });
     return { result: a, steps };
   }
 
@@ -440,55 +452,66 @@ function opMod(a, m, irr) {
     stepNum++;
   }
 
-  steps.push({ label: 'Result', text: `${toBin(p, m)}  =  ${polyStr(p)}`, highlight: true });
+  steps.push({ label: 'Result', text: `${toBin(p)}  =  ${polyStr(p)}`, highlight: true });
   return { result: p, steps };
 }
 
 function opMul(a, b, m, irr) {
+  // Compute partial products and raw product first so we know display widths
+  const _operandW = naturalWidth(a, b);
+  let _product = 0n;
+  const _partials = [];
+  let _bb = b;
+  let _i = 0;
+  while (_bb > 0n) {
+    if (_bb & 1n) {
+      const _partial = a << BigInt(_i);
+      _partials.push({ i: _i, partial: _partial });
+      _product ^= _partial;
+    }
+    _bb >>= 1n;
+    _i++;
+  }
+  const _mulW = naturalWidth(_product, a, b, ..._partials.map(p => p.partial));
+
   const steps = [];
   steps.push({ label: 'Operation', text: `(${polyStr(a)}) \u00D7 (${polyStr(b)})`, section: true });
   steps.push({ label: 'Step 1', text: 'Polynomial multiplication (shift-and-XOR)', section: true });
 
-  let product = 0n;
-  let bb = b;
-  let i = 0;
-  while (bb > 0n) {
-    if (bb & 1n) {
-      const partial = a << BigInt(i);
-      steps.push({
-        label: `Bit ${i} of B = 1`,
-        text: `A \u00AB ${i} = ${toBin(partial)}  (${polyStr(partial)})`
-      });
-      product ^= partial;
-    }
-    bb >>= 1n;
-    i++;
+  for (const { i: _bi, partial: _partial } of _partials) {
+    steps.push({
+      label: `Bit ${_bi} of B = 1`,
+      text: `A « ${_bi} = ${toBin(_partial, _mulW)}  (${polyStr(_partial)})`
+    });
   }
 
-  steps.push({ label: 'Raw product', text: `${toBin(product)}  =  ${polyStr(product)}` });
+  steps.push({ label: 'Raw product', text: `${toBin(_product, _mulW)}  =  ${polyStr(_product)}` });
 
-  if (degree(product) >= m) {
+  if (degree(_product) >= m) {
     steps.push({ label: 'Step 2', text: `Reduce mod ${polyStr(irr)}`, section: true });
-    let p = product;
+    let p = _product;
     let stepNum = 1;
     while (p !== 0n && degree(p) >= m) {
       const shift = degree(p) - m;
       const shifted = irr << BigInt(shift);
       const prev = p;
       p ^= shifted;
+      const rowW = naturalWidth(prev, shifted, p);
       steps.push({
         label: `Reduce ${stepNum}`,
-        text: `${toBin(prev)} \u2295 ${toBin(shifted)} = ${toBin(p)}`
+        text: `${toBin(prev, rowW)} ⊕ ${toBin(shifted, rowW)} = ${toBin(p, rowW)}`
       });
       stepNum++;
     }
-    steps.push({ label: 'Result', text: `${toBin(p, m)}  =  ${polyStr(p)}`, highlight: true });
+    const finalW = Math.max(_operandW, naturalWidth(p));
+    steps.push({ label: 'Result', text: `${toBin(p, finalW)}  =  ${polyStr(p)}`, highlight: true });
     return { result: p, steps };
   }
 
-  steps.push({ label: 'No reduction', text: `Degree ${degree(product)} < ${m}` });
-  steps.push({ label: 'Result', text: `${toBin(product, m)}  =  ${polyStr(product)}`, highlight: true });
-  return { result: product, steps };
+  steps.push({ label: 'No reduction', text: `Degree ${degree(_product)} < ${m}` });
+  const _finalW2 = Math.max(_operandW, naturalWidth(_product));
+  steps.push({ label: 'Result', text: `${toBin(_product, _finalW2)}  =  ${polyStr(_product)}`, highlight: true });
+  return { result: _product, steps };
 }
 
 function opInverse(a, m, irr) {
@@ -591,7 +614,75 @@ function opDiv(a, b, m, irr) {
   return { result, steps };
 }
 
+function opPower(base, exp, m, irr) {
+  const steps = [];
+  steps.push({ label: 'Operation', text: `(${polyStr(base)})^${exp} in GF(2${sup(m)})`, section: true });
+
+  if (!Number.isFinite(exp) || exp < 0) {
+    steps.push({ label: 'Error', text: 'Exponent must be a non-negative integer.', error: true });
+    return { result: null, steps };
+  }
+
+  if (exp === 0) {
+    steps.push({ label: 'Note', text: 'Any element raised to 0 is 1.' });
+    steps.push({ label: 'Result', text: `1  =  1`, highlight: true });
+    return { result: 1n, steps };
+  }
+
+  if (base === 0n) {
+    steps.push({ label: 'Note', text: '0 raised to any positive exponent is 0.' });
+    steps.push({ label: 'Result', text: `0  =  0`, highlight: true });
+    return { result: 0n, steps };
+  }
+
+  if (exp === 1) {
+    steps.push({ label: 'Note', text: 'Exponent 1 returns the base unchanged.' });
+    steps.push({ label: 'Result', text: `${toBin(base)}  =  ${polyStr(base)}`, highlight: true });
+    return { result: base, steps };
+  }
+
+  steps.push({ label: 'Method', text: 'Square-and-multiply (binary exponentiation)', section: true });
+  steps.push({ label: 'Exponent', text: `${exp} = ${exp.toString(2)} (binary, scanned LSB → MSB)` });
+
+  let result = 1n;
+  let acc = base;
+  let n = exp;
+  let bit = 0;
+
+  while (n > 0) {
+    if (n & 1) {
+      const before = result;
+      result = reduceSimple(mulRaw(result, acc), irr);
+      steps.push({
+        label: `Bit ${bit} = 1`,
+        text: `result ← (${polyStr(before)}) × (${polyStr(acc)}) mod p = ${polyStr(result)}`
+      });
+    }
+    n >>>= 1;
+    if (n > 0) {
+      const before = acc;
+      acc = reduceSimple(mulRaw(acc, acc), irr);
+      steps.push({
+        label: 'Square',
+        text: `acc ← (${polyStr(before)})² mod p = ${polyStr(acc)}`
+      });
+    }
+    bit++;
+  }
+
+  steps.push({ label: 'Result', text: `${toBin(result)}  =  ${polyStr(result)}`, highlight: true });
+  return { result, steps };
+}
+
 // ===================== FORMULA PARSER =====================
+
+function isExponentContext(tokens) {
+  for (let k = tokens.length - 1; k >= 0; k--) {
+    if (tokens[k].type === '^') return true;
+    if (tokens[k].type !== '(') return false;
+  }
+  return false;
+}
 
 function tokenizeFormula(str) {
   const tokens = [];
@@ -599,8 +690,15 @@ function tokenizeFormula(str) {
 
   while (i < str.length) {
     const ch = str[i];
+    const afterCaret = isExponentContext(tokens);
 
     if (/\s/.test(ch)) {
+      i++;
+      continue;
+    }
+
+    if (ch === '^') {
+      tokens.push({ type: '^', value: '^' });
       i++;
       continue;
     }
@@ -655,10 +753,17 @@ function tokenizeFormula(str) {
       continue;
     }
 
-    if (/[01]/.test(ch)) {
+    if (/[0-9]/.test(ch)) {
       let j = i;
-      while (j < str.length && /[01]/.test(str[j])) j++;
-      tokens.push({ type: 'number', value: str.slice(i, j) });
+      while (j < str.length && /[0-9]/.test(str[j])) j++;
+      const num = str.slice(i, j);
+      if (afterCaret) {
+        tokens.push({ type: 'intnum', value: num });
+      } else if (/^[01]+$/.test(num)) {
+        tokens.push({ type: 'number', value: num });
+      } else {
+        throw new Error(`"${num}" is not a valid binary literal. Use 0b/0x prefixes or [polynomial] notation.`);
+      }
       i = j;
       continue;
     }
@@ -738,13 +843,55 @@ FormulaParser.prototype.parseExpression = function() {
 };
 
 FormulaParser.prototype.parseTerm = function() {
-  let node = this.parseUnary();
+  let node = this.parsePower();
 
   while (this.peek() && ['*', '/'].includes(this.peek().type)) {
     const op = this.peek().type;
     this.pos++;
-    const right = this.parseUnary();
+    const right = this.parsePower();
     node = this.applyBinary(op, node, right);
+  }
+
+  return node;
+};
+
+FormulaParser.prototype.parsePower = function() {
+  let node = this.parseUnary();
+
+  while (this.peek() && this.peek().type === '^') {
+    this.pos++;
+    let expValue;
+    let expRepr;
+
+    if (this.peek() && this.peek().type === '(') {
+      this.pos++;
+      const intToken = this.expect('intnum', 'Exponent must be a non-negative integer (e.g. A^5).');
+      this.expect(')', 'Expected closing ) after exponent.');
+      expValue = parseInt(intToken.value, 10);
+      expRepr = `(${intToken.value})`;
+    } else {
+      const intToken = this.consume('intnum');
+      if (!intToken) throw new Error('Exponent must be a non-negative integer (e.g. A^5).');
+      expValue = parseInt(intToken.value, 10);
+      expRepr = intToken.value;
+    }
+
+    if (!Number.isFinite(expValue) || expValue < 0) {
+      throw new Error(`Invalid exponent: ${expRepr}.`);
+    }
+    if (expValue > 1000000) {
+      throw new Error(`Exponent ${expValue} is too large; please use a value below 10^6.`);
+    }
+
+    this.ensureFieldElement(node);
+    this.steps.push({ label: 'Formula Step', text: `${node.repr}^${expRepr}`, section: true });
+    const outcome = opPower(node.value, expValue, this.app.m, this.app.irr);
+    this.steps.push(...outcome.steps);
+    if (outcome.result === null) {
+      const errStep = outcome.steps.find(s => s.error);
+      throw new Error(errStep ? errStep.text : 'Power evaluation failed.');
+    }
+    node = { value: outcome.result, repr: `(${node.repr}^${expRepr})` };
   }
 
   return node;
@@ -836,7 +983,80 @@ FormulaParser.prototype.applyBinary = function(op, left, right) {
   return { value: outcome.result, repr: `(${left.repr} ${symbol} ${right.repr})` };
 };
 
+
+// ===================== FIELD-STATS HELPERS =====================
+
+function primeFactorsBigInt(n) {
+  // Returns array of [prime, exponent] for small/medium n.
+  // Caps trial division at ~1e7. For larger leftovers, returns last factor as-is.
+  const factors = [];
+  let x = n;
+  let d = 2n;
+  while (d * d <= x && d < 10000000n) {
+    if (x % d === 0n) {
+      let e = 0;
+      while (x % d === 0n) { x = x / d; e++; }
+      factors.push([d, e]);
+    }
+    d++;
+  }
+  if (x > 1n) factors.push([x, 1]);
+  return factors;
+}
+
+function powModPoly(base, exp, mod) {
+  // Compute base^exp mod p in GF(2)[x] / (mod) using square-and-multiply.
+  let result = 1n;
+  let acc = base;
+  let e = exp;
+  while (e > 0n) {
+    if (e & 1n) result = reduceSimple(mulRaw(result, acc), mod);
+    acc = reduceSimple(mulRaw(acc, acc), mod);
+    e >>= 1n;
+  }
+  return result;
+}
+
+function findPrimitiveElement(m, irr, factors) {
+  // Smallest g such that g has order 2^m - 1 in GF(2^m) mod irr.
+  // Returns null if exhaustive search exceeds the field size.
+  const N = (1n << BigInt(m)) - 1n;
+  const facList = factors || primeFactorsBigInt(N);
+  const upper = (1n << BigInt(m));
+  for (let g = 2n; g < upper; g++) {
+    let isPrim = true;
+    for (const [p] of facList) {
+      const t = powModPoly(g, N / p, irr);
+      if (t === 1n) { isPrim = false; break; }
+    }
+    if (isPrim) return g;
+  }
+  return null;
+}
+
+function orderOfX(m, irr, factors) {
+  // Smallest k > 0 such that x^k ≡ 1 (mod irr). k must divide 2^m - 1.
+  // Use the divisor approach: start with N = 2^m - 1, for each prime factor p,
+  // while x^(N/p) == 1 in field, divide N by p.
+  const N = (1n << BigInt(m)) - 1n;
+  let order = N;
+  const facList = factors || primeFactorsBigInt(N);
+  for (const [p] of facList) {
+    while (order % p === 0n) {
+      const candidate = order / p;
+      const r = powModPoly(2n, candidate, irr); // 2n represents x
+      if (r === 1n) order = candidate;
+      else break;
+    }
+  }
+  return order;
+}
+
 // ===================== UI CONTROLLER =====================
+
+const HISTORY_STORAGE_KEY = 'gf2m-calc-history-v1';
+const HISTORY_MAX_ENTRIES = 50;
+const THEME_STORAGE_KEY = 'gf2m-calc-theme-v1';
 
 const App = {
   m: 8,
@@ -850,16 +1070,70 @@ const App = {
   recordingFormulaHistory: true,
   variableNames: [],
   nextVariableCode: 'A'.charCodeAt(0),
+  history: [],
+  showingBitViz: false,
 
   init() {
+    this.applyStoredTheme();
     this.buildDegreeSelectors();
     this.addVariable('A');
     this.addVariable('B');
     this.addVariable('C');
     this.bindEvents();
+    this.bindCollapsibles();
+    this.bindKeyboardShortcuts();
+    this.bindThemeToggle();
     this.buildModulusOptions();
     this.updateIrreducibleDisplay();
     this.updatePlaceholders();
+    this.loadHistory();
+    this.renderHistory();
+    this.loadPinned();
+    this.renderPinned();
+    this.bindConverter();
+    this.bindCommandPalette();
+    this.bindPlaybackControls();
+    this.bindExportModal();
+    this.bindStickyChip();
+    this.renderFieldStats();
+    this.renderFieldTables();
+    const shareBtn = document.getElementById('workspace-share');
+    if (shareBtn) shareBtn.addEventListener('click', () => this.shareWorkspace());
+    // Restore from URL hash if present (after default init so DOM exists)
+    if (window.location.hash && window.location.hash.startsWith('#s=')) {
+      try { this.loadFromUrlHash(); } catch (e) { /* ignore */ }
+    }
+  },
+
+  applyStoredTheme() {
+    let theme = null;
+    try {
+      theme = localStorage.getItem(THEME_STORAGE_KEY);
+    } catch (e) { /* ignore */ }
+    if (theme !== 'light' && theme !== 'dark') {
+      theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+        ? 'light'
+        : 'dark';
+    }
+    this.setTheme(theme);
+  },
+
+  setTheme(theme) {
+    if (theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch (e) { /* ignore */ }
+  },
+
+  bindThemeToggle() {
+    const btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      this.setTheme(current === 'light' ? 'dark' : 'light');
+    });
   },
 
   buildDegreeSelectors() {
@@ -939,6 +1213,27 @@ const App = {
     // Result actions
     document.getElementById('copy-result').addEventListener('click', () => this.copyResult());
     document.getElementById('use-as-var').addEventListener('click', () => this.useResultAsVariable());
+    document.getElementById('toggle-bit-viz').addEventListener('click', () => this.toggleBitViz());
+    const pinBtn = document.getElementById('pin-result');
+    if (pinBtn) pinBtn.addEventListener('click', () => this.pinCurrentResult());
+    const expBtn = document.getElementById('export-result');
+    if (expBtn) expBtn.addEventListener('click', () => this.openExportModal());
+    const pinClear = document.getElementById('pinned-clear');
+    if (pinClear) pinClear.addEventListener('click', () => this.clearPinned());
+
+    // Workspace import/export
+    document.getElementById('workspace-export').addEventListener('click', () => this.exportWorkspace());
+    document.getElementById('workspace-import').addEventListener('click', () => {
+      document.getElementById('workspace-file-input').click();
+    });
+    document.getElementById('workspace-file-input').addEventListener('change', event => {
+      const file = event.target.files && event.target.files[0];
+      if (file) this.importWorkspaceFile(file);
+      event.target.value = '';
+    });
+
+    // History
+    document.getElementById('history-clear').addEventListener('click', () => this.clearHistory());
   },
 
   setDegree(d) {
@@ -956,6 +1251,8 @@ const App = {
     for (const name of this.variableNames) this.updateVariablePreview(name);
     this.updateFormulaPreview();
     this.hideResults();
+    this.renderFieldStats();
+    this.renderFieldTables();
   },
 
   updateIrreducibleDisplay() {
@@ -1096,6 +1393,8 @@ const App = {
     for (const option of this.modulusOptions) option.selected = option.poly === poly;
     this.updateIrreducibleDisplay();
     this.hideResults();
+    this.renderFieldStats();
+    this.renderFieldTables();
   },
 
   selectModulusByIndex(index) {
@@ -1126,6 +1425,7 @@ const App = {
     this.selectModulus(poly);
     error.textContent = 'Custom modulus verified and selected.';
     error.style.color = 'var(--green)';
+    this.renderFieldTables();
   },
 
   updatePlaceholders() {
@@ -1194,7 +1494,7 @@ const App = {
     return row ? row.dataset.format || 'bin' : 'bin';
   },
 
-  addVariable(preferredName, preferredFormat = 'bin') {
+  addVariable(preferredName, preferredFormat = 'bin', preferredColor) {
     const list = document.getElementById('variables-list');
     const name = preferredName || this.nextVariableName();
     if (this.variableNames.includes(name)) return;
@@ -1205,6 +1505,8 @@ const App = {
     row.className = 'variable-row';
     row.dataset.name = name;
     row.dataset.format = preferredFormat;
+    row.dataset.color = String(this.assignColorIndex(preferredColor));
+    row.draggable = true;
 
     const nameInput = document.createElement('input');
     nameInput.className = 'variable-name';
@@ -1252,12 +1554,15 @@ const App = {
     this.bindPolynomialTyping(valueInput, () => row.dataset.format === 'poly');
     remove.addEventListener('click', () => this.removeVariable(row.dataset.name));
 
-    row.append(nameInput, formatToggle, valueInput, preview, error, remove);
+    this.attachDragHandlers(row);
+
+    row.append(nameInput, formatToggle, valueInput, remove, preview, error);
     list.appendChild(row);
 
     this.updatePlaceholders();
     this.updateFormulaToolbar();
     this.updateVariablePreview(name);
+    this.updateFormulaPreview();
   },
 
   setVariableFormat(name, fmt) {
@@ -1355,6 +1660,7 @@ const App = {
       [' \u2295 ', '\u2295'],
       [' \u00D7 ', '\u00D7'],
       [' \u00F7 ', '\u00F7'],
+      ['^', 'xⁿ'],
       ['inv(', 'inv'],
       ['(', '('],
       [')', ')']
@@ -1395,6 +1701,7 @@ const App = {
     if (str === '') {
       preview.textContent = 'Empty';
       preview.style.color = 'var(--text-muted)';
+      this.updateDegreeBadge(row, null, 'empty');
       return;
     }
 
@@ -1404,12 +1711,14 @@ const App = {
       if (fmt === 'bin') error.textContent = 'Invalid: use 0 and 1';
       else if (fmt === 'hex') error.textContent = 'Invalid: use 0-9 and A-F';
       else error.textContent = 'Invalid polynomial';
+      this.updateDegreeBadge(row, null, 'invalid');
       return;
     }
 
     if (val === null) {
       preview.textContent = 'Empty';
       preview.style.color = 'var(--text-muted)';
+      this.updateDegreeBadge(row, null, 'empty');
       return;
     }
 
@@ -1455,6 +1764,8 @@ const App = {
       error.textContent = `Degree ${degree(val)} \u2265 m=${this.m}; reduced before evaluation.`;
       error.style.color = 'var(--yellow)';
     }
+
+    this.updateDegreeBadge(row, val);
   },
 
   getFormulaVariables() {
@@ -1585,8 +1896,8 @@ const App = {
 
     try {
       const tokens = tokenizeFormula(formula);
-      preview.textContent = `Formula: ${formatFormulaDisplay(formula)}`;
-      preview.style.color = 'var(--cyan)';
+      this.renderColoredFormulaPreview(preview, tokens);
+      preview.style.color = '';
     } catch (err) {
       preview.textContent = '';
       error.textContent = err.message;
@@ -1596,6 +1907,11 @@ const App = {
   hideResults() {
     document.getElementById('result-section').classList.add('hidden');
     document.getElementById('steps-section').classList.add('hidden');
+    const viz = document.getElementById('bit-viz');
+    if (viz) viz.classList.add('hidden');
+    const btn = document.getElementById('toggle-bit-viz');
+    if (btn) btn.classList.remove('active');
+    this.showingBitViz = false;
   },
 
   computeFormula() {
@@ -1632,11 +1948,12 @@ const App = {
               : `${name} = ${polyStr(variables[name].value)}`
           })),
         ...parser.steps,
-        { label: 'Final Result', text: `${toBin(output.value, this.m)}  =  ${polyStr(output.value)}`, highlight: true }
+        { label: 'Final Result', text: `${toBin(output.value)}  =  ${polyStr(output.value)}`, highlight: true }
       ];
 
       this.showResult(output.value, 'formula');
       this.showSteps(steps);
+      this.recordHistoryEntry(formula, output.value, variables);
     } catch (err) {
       this.showError(err.message);
       this.showSteps([{ label: 'Formula Error', text: err.message, error: true }]);
@@ -1666,9 +1983,9 @@ const App = {
     };
     title.textContent = opNames[op] || 'Result';
 
-    // Primary display based on selected result format
+    // Primary display based on selected result format (natural width)
     if (this.resultFormat === 'bin') {
-      valEl.textContent = toBin(val, this.m);
+      valEl.textContent = toBin(val);
     } else if (this.resultFormat === 'hex') {
       valEl.textContent = toHex(val);
     } else {
@@ -1686,6 +2003,10 @@ const App = {
     if (this.resultFormat !== 'hex') parts.push(`Hex: ${toHex(val)}`);
     if (this.resultFormat !== 'poly') parts.push(`Poly: ${polyStr(val)}`);
     altEl.textContent = parts.join('  |  ');
+
+    this.renderBitVisualization(val);
+    const sticky = document.getElementById('sticky-value');
+    if (sticky) sticky.textContent = this.formatValue(val, this.resultFormat) || polyStr(val);
   },
 
   showError(msg) {
@@ -1752,7 +2073,1536 @@ const App = {
     } catch (err) {
       this.showError('Clipboard copy is not available in this browser context.');
     }
+  },
+
+  // ===================== COLLAPSIBLE SECTIONS =====================
+
+  bindCollapsibles() {
+    document.querySelectorAll('.collapse-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const section = btn.closest('.collapsible-section');
+        if (section) section.classList.toggle('collapsed');
+      });
+    });
+  },
+
+  // ===================== KEYBOARD SHORTCUTS =====================
+
+  bindKeyboardShortcuts() {
+    document.addEventListener('keydown', event => {
+      const ctrl = event.ctrlKey || event.metaKey;
+      const formulaInput = document.getElementById('formula-input');
+      const inEditable = ['INPUT', 'TEXTAREA'].includes(document.activeElement && document.activeElement.tagName);
+
+      if (ctrl && (event.key === 'k' || event.key === 'K')) {
+        event.preventDefault();
+        this.openCommandPalette();
+        return;
+      }
+
+      if (ctrl && event.key === 'Enter') {
+        event.preventDefault();
+        this.computeFormula();
+        return;
+      }
+
+      if (ctrl && event.key.toLowerCase() === 'l' && document.activeElement === formulaInput) {
+        event.preventDefault();
+        this.clearFormula();
+        formulaInput.focus();
+        return;
+      }
+
+      if (event.key === 'Escape' && !inEditable) {
+        this.hideResults();
+        return;
+      }
+
+      if (event.key === 'Escape' && document.activeElement === formulaInput) {
+        formulaInput.blur();
+        this.hideResults();
+      }
+    });
+  },
+
+  // ===================== BIT VISUALIZATION =====================
+
+  toggleBitViz() {
+    this.showingBitViz = !this.showingBitViz;
+    const btn = document.getElementById('toggle-bit-viz');
+    btn.classList.toggle('active', this.showingBitViz);
+    if (this.lastResult !== null) {
+      this.renderBitVisualization(this.lastResult);
+    }
+  },
+
+  renderBitVisualization(val) {
+    const container = document.getElementById('bit-viz');
+    if (!container) return;
+
+    if (!this.showingBitViz || val === null || val === undefined) {
+      container.classList.add('hidden');
+      container.innerHTML = '';
+      return;
+    }
+
+    container.classList.remove('hidden');
+    container.innerHTML = '';
+
+    const bits = this.m;
+    if (bits > 64) {
+      const note = document.createElement('div');
+      note.className = 'bit-viz-note';
+      note.textContent = `Bit visualization is hidden for m=${bits} (too large to render). Switch to a smaller field.`;
+      container.appendChild(note);
+      return;
+    }
+
+    for (let i = bits - 1; i >= 0; i--) {
+      const bit = (val >> BigInt(i)) & 1n;
+      const cell = document.createElement('div');
+      cell.className = 'bit-cell' + (bit === 1n ? ' set' : '');
+      cell.title = i === 0 ? 'constant term (1)' : i === 1 ? 'x' : `x^${i}`;
+      const valueEl = document.createElement('span');
+      valueEl.className = 'bit-value';
+      valueEl.textContent = String(bit);
+      const expEl = document.createElement('span');
+      expEl.className = 'bit-exp';
+      expEl.textContent = i.toString();
+      cell.append(valueEl, expEl);
+      container.appendChild(cell);
+    }
+  },
+
+  // ===================== HISTORY =====================
+
+  loadHistory() {
+    try {
+      const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
+      this.history = stored ? JSON.parse(stored) : [];
+      if (!Array.isArray(this.history)) this.history = [];
+    } catch (e) {
+      this.history = [];
+    }
+  },
+
+  saveHistory() {
+    try {
+      localStorage.setItem(
+        HISTORY_STORAGE_KEY,
+        JSON.stringify(this.history.slice(0, HISTORY_MAX_ENTRIES))
+      );
+    } catch (e) {
+      // localStorage might be full or unavailable; ignore silently
+    }
+  },
+
+  recordHistoryEntry(formula, result, variables) {
+    const entry = {
+      timestamp: Date.now(),
+      m: this.m,
+      irrHex: this.irr.toString(16),
+      irrPoly: polyStr(this.irr),
+      formula,
+      formulaDisplay: formatFormulaDisplay(formula),
+      resultBin: toBin(result),
+      resultHex: toHex(result),
+      resultPoly: polyStr(result),
+      resultFormat: this.resultFormat,
+      variables: this.variableNames
+        .filter(name => variables[name])
+        .map(name => {
+          const row = this.getVariableRow(name);
+          const input = this.getVariableValueInput(name);
+          return {
+            name,
+            format: (row && row.dataset.format) || 'bin',
+            value: (input && input.value) || ''
+          };
+        })
+    };
+
+    this.history.unshift(entry);
+    if (this.history.length > HISTORY_MAX_ENTRIES) {
+      this.history.length = HISTORY_MAX_ENTRIES;
+    }
+    this.saveHistory();
+    this.renderHistory();
+  },
+
+  renderHistory() {
+    const list = document.getElementById('history-list');
+    if (!list) return;
+
+    list.innerHTML = '';
+
+    if (this.history.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'history-empty';
+      empty.textContent = 'No saved calculations yet. Evaluate a formula to start your history.';
+      list.appendChild(empty);
+      return;
+    }
+
+    this.history.forEach((entry, idx) => {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+
+      const main = document.createElement('div');
+      main.className = 'history-main';
+
+      const formula = document.createElement('div');
+      formula.className = 'history-formula';
+      formula.textContent = entry.formulaDisplay || formatFormulaDisplay(entry.formula);
+
+      const result = document.createElement('div');
+      result.className = 'history-result';
+      result.textContent = `= ${entry.resultPoly}`;
+
+      const meta = document.createElement('div');
+      meta.className = 'history-meta';
+      const mBadge = document.createElement('span');
+      mBadge.className = 'badge';
+      mBadge.textContent = `m=${entry.m}`;
+      const irrBadge = document.createElement('span');
+      irrBadge.className = 'badge';
+      irrBadge.textContent = `mod ${entry.irrPoly}`;
+      const date = new Date(entry.timestamp);
+      const dateText = document.createElement('span');
+      dateText.textContent = date.toLocaleString();
+      meta.append(mBadge, irrBadge, dateText);
+
+      main.append(formula, result, meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'history-actions';
+
+      const reimport = document.createElement('button');
+      reimport.className = 'small-btn';
+      reimport.type = 'button';
+      reimport.textContent = 'Re-import';
+      reimport.title = 'Restore field, variables, and formula from this entry';
+      reimport.addEventListener('click', () => this.reimportHistory(idx));
+
+      const remove = document.createElement('button');
+      remove.className = 'small-btn history-remove';
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.title = 'Delete this entry';
+      remove.addEventListener('click', () => this.removeHistoryEntry(idx));
+
+      actions.append(reimport, remove);
+      item.append(main, actions);
+      list.appendChild(item);
+    });
+  },
+
+  reimportHistory(idx) {
+    const entry = this.history[idx];
+    if (!entry) return;
+
+    this.applyState({
+      m: entry.m,
+      irrHex: entry.irrHex,
+      formula: entry.formula,
+      resultFormat: entry.resultFormat,
+      variables: entry.variables
+    });
+  },
+
+  removeHistoryEntry(idx) {
+    this.history.splice(idx, 1);
+    this.saveHistory();
+    this.renderHistory();
+  },
+
+  clearHistory() {
+    if (this.history.length === 0) return;
+    if (!confirm('Clear all calculation history? This cannot be undone.')) return;
+    this.history = [];
+    this.saveHistory();
+    this.renderHistory();
+  },
+
+  // ===================== WORKSPACE EXPORT/IMPORT =====================
+
+  exportWorkspace() {
+    const data = {
+      kind: 'gf2m-workspace',
+      version: 1,
+      timestamp: Date.now(),
+      m: this.m,
+      irrHex: this.irr.toString(16),
+      irrPoly: polyStr(this.irr),
+      resultFormat: this.resultFormat,
+      formula: document.getElementById('formula-input').value,
+      variables: this.variableNames.map(name => {
+        const row = this.getVariableRow(name);
+        const input = this.getVariableValueInput(name);
+        return {
+          name,
+          format: (row && row.dataset.format) || 'bin',
+          value: (input && input.value) || ''
+        };
+      }),
+      history: this.history
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.download = `gf2m-workspace-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  async importWorkspaceFile(file) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data || typeof data !== 'object') throw new Error('Invalid workspace file (not an object).');
+
+      this.applyState({
+        m: data.m,
+        irrHex: data.irrHex,
+        formula: data.formula,
+        resultFormat: data.resultFormat,
+        variables: Array.isArray(data.variables) ? data.variables : []
+      });
+
+      if (Array.isArray(data.history)) {
+        this.history = data.history.slice(0, HISTORY_MAX_ENTRIES);
+        this.saveHistory();
+        this.renderHistory();
+      }
+    } catch (err) {
+      this.showError(`Could not import workspace: ${err.message}`);
+    }
+  },
+
+  applyState(state) {
+    if (typeof state.m === 'number' && state.m >= 2 && state.m <= 571) {
+      if (state.m !== this.m) this.setDegree(state.m);
+    }
+
+    if (typeof state.irrHex === 'string' && state.irrHex.length > 0) {
+      try {
+        const irr = BigInt('0x' + state.irrHex);
+        if (degree(irr) === this.m) {
+          if (!this.modulusOptions.find(o => o.poly === irr)) {
+            this.modulusOptions.push(makeModulusOption(irr, 'imported'));
+          }
+          this.selectModulus(irr);
+        }
+      } catch (e) {
+        // ignore bad hex
+      }
+    }
+
+    // Reset variables to imported set
+    for (const name of [...this.variableNames]) this.removeVariable(name);
+    this.nextVariableCode = 'A'.charCodeAt(0);
+    if (Array.isArray(state.variables)) {
+      for (const v of state.variables) {
+        if (!v || typeof v.name !== 'string') continue;
+        const safeName = this.sanitizeVariableName(v.name);
+        if (!safeName || ['XOR', 'INV'].includes(safeName)) continue;
+        this.addVariable(safeName, v.format === 'hex' || v.format === 'poly' ? v.format : 'bin');
+        const input = this.getVariableValueInput(safeName);
+        if (input) input.value = typeof v.value === 'string' ? v.value : '';
+        this.updateVariablePreview(safeName);
+      }
+    }
+
+    if (typeof state.formula === 'string') {
+      const formulaInput = document.getElementById('formula-input');
+      formulaInput.value = state.formula;
+      this.recordFormulaHistory();
+    }
+
+    if (state.resultFormat === 'bin' || state.resultFormat === 'hex' || state.resultFormat === 'poly') {
+      this.setResultFormat(state.resultFormat);
+    }
+
+    this.updateFormulaPreview();
+    this.hideResults();
   }
+  ,
+
+  // ===================== VARIABLE COLOR + DEGREE BADGE =====================
+
+  assignColorIndex(preferred) {
+    const palette = 6;
+    const used = new Set(this.variableNames
+      .map(n => this.getVariableRow(n))
+      .filter(r => r)
+      .map(r => r.dataset.color));
+    if (preferred !== undefined && preferred !== null) {
+      const i = ((Number(preferred) % palette) + palette) % palette;
+      return i;
+    }
+    for (let i = 0; i < palette; i++) {
+      if (!used.has(String(i))) return i;
+    }
+    return this.variableNames.length % palette;
+  },
+
+  updateDegreeBadge(row, val, state) {
+    if (!row) return;
+    let badge = row.querySelector('.variable-degree-badge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'variable-degree-badge';
+      const dot = document.createElement('span');
+      dot.className = 'badge-dot';
+      const text = document.createElement('span');
+      text.className = 'badge-text';
+      badge.append(dot, text);
+      const preview = row.querySelector('.variable-preview');
+      if (preview) preview.appendChild(badge);
+    }
+    const text = badge.querySelector('.badge-text');
+    badge.classList.remove('in-field', 'over-field', 'invalid');
+    if (state === 'empty') {
+      text.textContent = 'empty';
+      return;
+    }
+    if (state === 'invalid' || val === null || val === undefined) {
+      text.textContent = 'invalid';
+      badge.classList.add('invalid');
+      return;
+    }
+    const d = degree(val);
+    if (val === 0n) {
+      text.textContent = `0 in F`;
+      badge.classList.add('in-field');
+      return;
+    }
+    if (d < this.m) {
+      text.textContent = `deg ${d} < m=${this.m}`;
+      badge.classList.add('in-field');
+    } else {
+      text.textContent = `deg ${d} ≥ m=${this.m} (will reduce)`;
+      badge.classList.add('over-field');
+    }
+  },
+
+  // ===================== COLORED FORMULA PREVIEW =====================
+
+  renderColoredFormulaPreview(container, tokens) {
+    container.textContent = '';
+    container.appendChild(document.createTextNode('Formula: '));
+    for (const t of tokens) {
+      if (t.type === 'var') {
+        const span = document.createElement('span');
+        span.className = 'var-token';
+        const row = this.getVariableRow(t.value);
+        if (row) span.dataset.color = row.dataset.color;
+        span.textContent = t.value;
+        container.appendChild(span);
+      } else if (t.type === '(' || t.type === ')') {
+        const span = document.createElement('span');
+        span.className = 'formula-paren';
+        span.textContent = t.value;
+        container.appendChild(span);
+      } else if (t.type === '+' || t.type === '-' || t.type === '*' || t.type === '/' || t.type === 'xor' || t.type === '^') {
+        const span = document.createElement('span');
+        span.className = 'formula-op-token';
+        const sym = t.type === '*' ? ' × ' : t.type === '/' ? ' ÷ ' : t.type === 'xor' ? ' ⊕ ' : t.type === '^' ? '^' : ` ${t.value} `;
+        span.textContent = sym;
+        container.appendChild(span);
+      } else if (t.type === 'inv') {
+        const span = document.createElement('span');
+        span.className = 'formula-op-token';
+        span.textContent = 'inv';
+        container.appendChild(span);
+      } else if (t.type === 'intnum' || t.type === 'number' || t.type === 'literal') {
+        container.appendChild(document.createTextNode(t.value));
+      }
+    }
+  },
+
+  // ===================== DRAG-AND-DROP REORDER =====================
+
+  attachDragHandlers(row) {
+    row.addEventListener('dragstart', (event) => {
+      this._draggingRow = row;
+      row.classList.add('dragging');
+      try {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', row.dataset.name || '');
+      } catch (e) { /* ignore */ }
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      document.querySelectorAll('.variable-row').forEach(r => {
+        r.classList.remove('drop-target-above', 'drop-target-below');
+      });
+      this._draggingRow = null;
+    });
+    row.addEventListener('dragover', (event) => {
+      if (!this._draggingRow || this._draggingRow === row) return;
+      event.preventDefault();
+      const rect = row.getBoundingClientRect();
+      const above = (event.clientY - rect.top) < rect.height / 2;
+      row.classList.toggle('drop-target-above', above);
+      row.classList.toggle('drop-target-below', !above);
+    });
+    row.addEventListener('dragleave', () => {
+      row.classList.remove('drop-target-above', 'drop-target-below');
+    });
+    row.addEventListener('drop', (event) => {
+      event.preventDefault();
+      if (!this._draggingRow || this._draggingRow === row) return;
+      const rect = row.getBoundingClientRect();
+      const above = (event.clientY - rect.top) < rect.height / 2;
+      const list = document.getElementById('variables-list');
+      list.insertBefore(this._draggingRow, above ? row : row.nextSibling);
+      // Re-sync this.variableNames from DOM order
+      this.variableNames = Array.from(list.querySelectorAll('.variable-row'))
+        .map(r => r.dataset.name);
+      row.classList.remove('drop-target-above', 'drop-target-below');
+      this.updateFormulaToolbar();
+      this.updateFormulaPreview();
+    });
+  },
+
+  // ===================== QUICK CONVERTER =====================
+
+  bindConverter() {
+    const bin = document.getElementById('conv-bin');
+    const hex = document.getElementById('conv-hex');
+    const poly = document.getElementById('conv-poly');
+    const dec = document.getElementById('conv-dec');
+    const info = document.getElementById('conv-info');
+    if (!bin || !hex || !poly || !dec) return;
+    if (poly) poly.classList.add('poly-input');
+    this.bindPolynomialTyping(poly, () => true);
+
+    const setError = (msg) => {
+      info.classList.add('error');
+      info.textContent = msg;
+    };
+    const setOK = (val) => {
+      info.classList.remove('error');
+      const d = degree(val);
+      info.textContent = val === 0n
+        ? '0 (zero polynomial)'
+        : `degree ${d}, ${d + 1} bit${d === 0 ? '' : 's'}`;
+    };
+
+    const updateAll = (source, val) => {
+      if (val === null) {
+        bin.value = ''; hex.value = ''; poly.value = ''; dec.value = '';
+        info.textContent = '';
+        info.classList.remove('error');
+        return;
+      }
+      if (source !== 'bin') bin.value = toBin(val);
+      if (source !== 'hex') hex.value = toHex(val);
+      if (source !== 'poly') poly.value = polyStr(val);
+      if (source !== 'dec') dec.value = val.toString(10);
+      setOK(val);
+    };
+
+    bin.addEventListener('input', () => {
+      const s = bin.value.trim();
+      if (s === '') return updateAll('bin', null);
+      if (!/^[01]+$/.test(s)) return setError('Binary: use only 0 and 1.');
+      try { updateAll('bin', BigInt('0b' + s)); } catch (e) { setError('Invalid binary.'); }
+    });
+    hex.addEventListener('input', () => {
+      const s = hex.value.trim();
+      if (s === '') return updateAll('hex', null);
+      if (!/^[0-9a-fA-F]+$/.test(s)) return setError('Hex: use only 0-9 and A-F.');
+      try { updateAll('hex', BigInt('0x' + s)); } catch (e) { setError('Invalid hex.'); }
+    });
+    poly.addEventListener('input', () => {
+      const s = poly.value.trim();
+      if (s === '') return updateAll('poly', null);
+      const v = parsePoly(s);
+      if (v === null) return setError('Polynomial: use x^n + ... format.');
+      updateAll('poly', v);
+    });
+    dec.addEventListener('input', () => {
+      const s = dec.value.trim();
+      if (s === '') return updateAll('dec', null);
+      if (!/^\d+$/.test(s)) return setError('Decimal: use only digits.');
+      try { updateAll('dec', BigInt(s)); } catch (e) { setError('Invalid decimal.'); }
+    });
+  },
+
+  // ===================== PINNED RESULTS =====================
+
+  loadPinned() {
+    try {
+      const stored = localStorage.getItem('gf2m-calc-pinned-v1');
+      this.pinned = stored ? JSON.parse(stored) : [];
+      if (!Array.isArray(this.pinned)) this.pinned = [];
+    } catch (e) {
+      this.pinned = [];
+    }
+  },
+
+  savePinned() {
+    try {
+      localStorage.setItem('gf2m-calc-pinned-v1', JSON.stringify(this.pinned.slice(0, 12)));
+    } catch (e) { /* ignore */ }
+  },
+
+  pinCurrentResult() {
+    if (this.lastResult === null) return;
+    const formula = document.getElementById('formula-input').value.trim() || 'result';
+    const entry = {
+      timestamp: Date.now(),
+      m: this.m,
+      irrHex: this.irr.toString(16),
+      irrPoly: polyStr(this.irr),
+      formula,
+      formulaDisplay: formatFormulaDisplay(formula),
+      resultBin: toBin(this.lastResult),
+      resultHex: toHex(this.lastResult),
+      resultPoly: polyStr(this.lastResult),
+      resultFormat: this.resultFormat
+    };
+    this.pinned.unshift(entry);
+    if (this.pinned.length > 12) this.pinned.length = 12;
+    this.savePinned();
+    this.renderPinned();
+  },
+
+  removePinned(idx) {
+    this.pinned.splice(idx, 1);
+    this.savePinned();
+    this.renderPinned();
+  },
+
+  clearPinned() {
+    if (this.pinned.length === 0) return;
+    if (!confirm('Remove all pinned results?')) return;
+    this.pinned = [];
+    this.savePinned();
+    this.renderPinned();
+  },
+
+  renderPinned() {
+    const list = document.getElementById('pinned-list');
+    if (!list) return;
+    list.innerHTML = '';
+    if (this.pinned.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'pinned-empty';
+      empty.textContent = 'No pinned results yet. Pin a result to compare it side-by-side later.';
+      list.appendChild(empty);
+      return;
+    }
+    this.pinned.forEach((entry, idx) => {
+      const card = document.createElement('div');
+      card.className = 'pinned-card';
+
+      const formula = document.createElement('div');
+      formula.className = 'pin-formula';
+      formula.textContent = entry.formulaDisplay || formatFormulaDisplay(entry.formula);
+
+      const result = document.createElement('div');
+      result.className = 'pin-result';
+      result.textContent = `= ${entry.resultPoly}`;
+
+      const meta = document.createElement('div');
+      meta.className = 'pin-meta';
+      meta.textContent = `m=${entry.m}  •  hex ${entry.resultHex}`;
+
+      const remove = document.createElement('button');
+      remove.className = 'pin-remove';
+      remove.type = 'button';
+      remove.title = 'Unpin';
+      remove.textContent = '×';
+      remove.addEventListener('click', () => this.removePinned(idx));
+
+      const actions = document.createElement('div');
+      actions.className = 'pin-actions';
+      const reimport = document.createElement('button');
+      reimport.className = 'small-btn';
+      reimport.type = 'button';
+      reimport.textContent = 'Re-import';
+      reimport.addEventListener('click', () => {
+        this.applyState({
+          m: entry.m,
+          irrHex: entry.irrHex,
+          formula: entry.formula,
+          resultFormat: entry.resultFormat,
+          variables: this.variableNames.map(n => ({
+            name: n,
+            format: this.getVariableFormat(n),
+            value: (this.getVariableValueInput(n) || { value: '' }).value
+          }))
+        });
+      });
+      actions.appendChild(reimport);
+
+      card.append(formula, result, meta, actions, remove);
+      list.appendChild(card);
+    });
+  },
+
+  // ===================== FIELD STATS PANEL =====================
+
+  renderFieldStats() {
+    const container = document.getElementById('field-stats');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const grid = document.createElement('div');
+    grid.className = 'field-stats-grid';
+
+    const addStat = (label, value, opts) => {
+      const cell = document.createElement('div');
+      cell.className = 'field-stat' + (opts && opts.cls ? ` ${opts.cls}` : '');
+      const lbl = document.createElement('div');
+      lbl.className = 'field-stat-label';
+      lbl.textContent = label;
+      const val = document.createElement('div');
+      val.className = 'field-stat-value' + (opts && opts.poly ? ' poly-value' : '') + (opts && opts.muted ? ' muted' : '');
+      val.textContent = value;
+      cell.append(lbl, val);
+      grid.appendChild(cell);
+    };
+
+    addStat('Field degree', `m = ${this.m}`);
+    if (this.m <= 200) {
+      const order = (1n << BigInt(this.m));
+      addStat('|F|', `2^${this.m} = ${this.m <= 16 ? order.toString() : '2^' + this.m}`);
+      const groupOrder = order - 1n;
+      addStat('|F*|', `2^${this.m} − 1 = ${this.m <= 16 ? groupOrder.toString() : '2^' + this.m + '−1'}`);
+    } else {
+      addStat('|F|', `2^${this.m}`);
+      addStat('|F*|', `2^${this.m} − 1`);
+    }
+    addStat('Modulus', polyStr(this.irr), { poly: true });
+    addStat('Modulus hex', '0x' + this.irr.toString(16).toUpperCase());
+
+    if (this.m <= 22) {
+      const groupOrder = (1n << BigInt(this.m)) - 1n;
+      const factors = primeFactorsBigInt(groupOrder);
+      const factorString = factors.length
+        ? factors.map(([p, e]) => e === 1 ? p.toString() : `${p}^${e}`).join(' · ')
+        : '1';
+      addStat('|F*| factors', factorString, { muted: true });
+
+      // Primitive test: order of x in GF(2^m)
+      const ord = orderOfX(this.m, this.irr, factors);
+      const isPrim = ord === groupOrder;
+      addStat('Modulus is primitive?', isPrim ? 'yes ✓' : 'no', { cls: isPrim ? 'primitive' : 'composite' });
+      if (!isPrim && ord !== null) addStat('Order of x', ord.toString(), { muted: true });
+    } else {
+      addStat('Primitive?', 'unknown (m too large)', { muted: true });
+    }
+
+    container.appendChild(grid);
+
+    // Generator orbit panel for small m
+    if (this.m <= 8) {
+      const orbit = document.createElement('div');
+      orbit.className = 'orbit-panel';
+      orbit.innerHTML = `
+        <div class="orbit-controls">
+          <label>Generator g (poly)</label>
+          <input type="text" id="orbit-g" value="x" autocomplete="off" spellcheck="false">
+          <span class="orbit-info" id="orbit-info"></span>
+        </div>
+        <div class="orbit-svg-wrap">
+          <svg class="orbit-svg" id="orbit-svg" viewBox="0 0 360 360" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+        <div class="orbit-note">Click a point to see g<sup>k</sup>. Green dot is the identity (1).</div>
+      `;
+      container.appendChild(orbit);
+      const input = orbit.querySelector('#orbit-g');
+      this.bindPolynomialTyping(input, () => true);
+      const refresh = () => this.renderGeneratorOrbit(input.value);
+      input.addEventListener('input', refresh);
+      refresh();
+    } else if (this.m <= 16) {
+      const note = document.createElement('div');
+      note.className = 'orbit-note';
+      note.textContent = `Orbit visualizer is shown for m ≤ 8 only (m=${this.m} would have ${(1n << BigInt(this.m)) - 1n} points).`;
+      container.appendChild(note);
+    }
+  },
+
+  renderGeneratorOrbit(gPolyStr) {
+    const svg = document.getElementById('orbit-svg');
+    const info = document.getElementById('orbit-info');
+    if (!svg) return;
+    svg.innerHTML = '';
+
+    let g = parsePoly(gPolyStr);
+    if (g === null || g === 0n) {
+      info.textContent = 'invalid generator';
+      return;
+    }
+    g = reduceSimple(g, this.irr);
+    if (g === 0n) {
+      info.textContent = 'g = 0 has no orbit';
+      return;
+    }
+
+    const points = [1n];
+    let p = g;
+    const limit = (1n << BigInt(this.m)) - 1n;
+    let safety = Number(limit) + 1;
+    while (p !== 1n && safety-- > 0) {
+      points.push(p);
+      p = reduceSimple(mulRaw(p, g), this.irr);
+    }
+    if (p !== 1n) {
+      info.textContent = 'orbit too long';
+      return;
+    }
+
+    const order = points.length;
+    info.textContent = `order ${order}` + (BigInt(order) === limit ? ' (primitive)' : '');
+
+    const cx = 180, cy = 180, r = 140;
+    // Background ring
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    bg.setAttribute('cx', cx); bg.setAttribute('cy', cy); bg.setAttribute('r', r);
+    bg.setAttribute('class', 'orbit-bg');
+    svg.appendChild(bg);
+
+    // Polyline
+    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline.setAttribute('class', 'orbit-line');
+    let lineStr = '';
+    const pos = [];
+    for (let i = 0; i < order; i++) {
+      const angle = (i / order) * 2 * Math.PI - Math.PI / 2;
+      const x = cx + r * Math.cos(angle);
+      const y = cy + r * Math.sin(angle);
+      pos.push([x, y]);
+      lineStr += `${x},${y} `;
+    }
+    if (order > 1) lineStr += `${pos[0][0]},${pos[0][1]}`;
+    polyline.setAttribute('points', lineStr);
+    svg.appendChild(polyline);
+
+    // Center label
+    const center = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    center.setAttribute('x', cx);
+    center.setAttribute('y', cy + 5);
+    center.setAttribute('class', 'orbit-center-label');
+    center.textContent = `g = ${polyStr(g)}, ord = ${order}`;
+    svg.appendChild(center);
+
+    // Points + labels
+    for (let i = 0; i < order; i++) {
+      const [x, y] = pos[i];
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', x);
+      c.setAttribute('cy', y);
+      c.setAttribute('r', 4.5);
+      c.setAttribute('class', 'orbit-point' + (i === 0 ? ' identity' : ''));
+      const tooltip = i === 0 ? '1 (identity)' : `g^${i} = ${polyStr(points[i])}`;
+      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+      title.textContent = tooltip;
+      c.appendChild(title);
+      svg.appendChild(c);
+
+      if (order <= 32 || i % Math.ceil(order / 32) === 0) {
+        const lx = cx + (r + 14) * Math.cos((i / order) * 2 * Math.PI - Math.PI / 2);
+        const ly = cy + (r + 14) * Math.sin((i / order) * 2 * Math.PI - Math.PI / 2);
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', lx);
+        label.setAttribute('y', ly + 3);
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('class', 'orbit-label');
+        label.textContent = i === 0 ? '1' : `g${i}`;
+        svg.appendChild(label);
+      }
+    }
+  },
+
+  // ===================== COMMAND PALETTE =====================
+
+  openCommandPalette() {
+    const overlay = document.getElementById('palette-overlay');
+    const input = document.getElementById('palette-input');
+    overlay.classList.remove('hidden');
+    overlay.setAttribute('aria-hidden', 'false');
+    input.value = '';
+    this.paletteSelectedIndex = 0;
+    this.renderPaletteResults('');
+    setTimeout(() => input.focus(), 30);
+  },
+
+  closeCommandPalette() {
+    const overlay = document.getElementById('palette-overlay');
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-hidden', 'true');
+  },
+
+  paletteCommands() {
+    return [
+      { id: 'evaluate',   icon: '▶',  title: 'Evaluate formula',         desc: 'Run current formula', run: () => this.computeFormula() },
+      { id: 'clear',      icon: '⌫', title: 'Clear formula',            desc: 'Empty the formula box', run: () => this.clearFormula() },
+      { id: 'add-var',    icon: '+',  title: 'Add variable',             desc: 'Append a new variable row', run: () => this.addVariable() },
+      { id: 'pin',        icon: '★',  title: 'Pin current result',      desc: 'Save result for comparison', run: () => this.pinCurrentResult() },
+      { id: 'theme',      icon: '☾',  title: 'Toggle light / dark theme', desc: 'Switch theme', run: () => this.setTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light') },
+      { id: 'fmt-bin',    icon: '01', title: 'Result format: binary',    desc: 'Show result in binary', run: () => this.setResultFormat('bin') },
+      { id: 'fmt-hex',    icon: '0x', title: 'Result format: hex',       desc: 'Show result in hexadecimal', run: () => this.setResultFormat('hex') },
+      { id: 'fmt-poly',   icon: 'xⁿ', title: 'Result format: polynomial', desc: 'Show result in polynomial notation', run: () => this.setResultFormat('poly') },
+      { id: 'bits',       icon: '▦',  title: 'Toggle bit visualization', desc: 'Show/hide bit grid in result', run: () => this.toggleBitViz() },
+      { id: 'export',     icon: '↓',  title: 'Export workspace JSON',    desc: 'Download current state', run: () => this.exportWorkspace() },
+      { id: 'import',     icon: '↑',  title: 'Import workspace JSON',    desc: 'Load a workspace file', run: () => document.getElementById('workspace-file-input').click() },
+      { id: 'export-fmt', icon: '∑',  title: 'Export current calculation as LaTeX / Markdown', desc: 'Generate report-ready math', run: () => this.openExportModal() },
+      { id: 'undo',       icon: '↶',  title: 'Undo formula edit',        desc: 'Step formula history back', run: () => this.undoFormula() },
+      { id: 'redo',       icon: '↷',  title: 'Redo formula edit',        desc: 'Step formula history forward', run: () => this.redoFormula() },
+      { id: 'play',       icon: '▶',  title: 'Play step-by-step animation', desc: 'Animate the breakdown', run: () => this.startPlayback() },
+      { id: 'history-clear', icon: '✕', title: 'Clear calculation history', desc: 'Wipe history list', run: () => this.clearHistory() },
+      { id: 'pinned-clear',  icon: '✕', title: 'Clear pinned results', desc: 'Wipe pinned list', run: () => this.clearPinned() },
+    ];
+  },
+
+  renderPaletteResults(query) {
+    const list = document.getElementById('palette-results');
+    list.innerHTML = '';
+    const q = query.trim().toLowerCase();
+    const all = this.paletteCommands();
+    const filtered = q === ''
+      ? all
+      : all.filter(c =>
+          c.title.toLowerCase().includes(q) ||
+          (c.desc || '').toLowerCase().includes(q) ||
+          c.id.includes(q)
+        );
+
+    if (filtered.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'palette-empty';
+      empty.textContent = 'No matching commands';
+      list.appendChild(empty);
+      this.paletteFiltered = [];
+      return;
+    }
+
+    this.paletteFiltered = filtered;
+    if (this.paletteSelectedIndex >= filtered.length) this.paletteSelectedIndex = 0;
+    filtered.forEach((c, idx) => {
+      const item = document.createElement('div');
+      item.className = 'palette-item' + (idx === this.paletteSelectedIndex ? ' active' : '');
+      item.dataset.idx = idx;
+      const icon = document.createElement('span');
+      icon.className = 'palette-icon';
+      icon.textContent = c.icon || '';
+      const title = document.createElement('span');
+      title.className = 'palette-item-title';
+      title.textContent = c.title;
+      const desc = document.createElement('span');
+      desc.className = 'palette-item-desc';
+      desc.textContent = c.desc || '';
+      item.append(icon, title, desc);
+      item.addEventListener('mouseenter', () => {
+        this.paletteSelectedIndex = idx;
+        list.querySelectorAll('.palette-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+      });
+      item.addEventListener('click', () => this.runPaletteCommand(c));
+      list.appendChild(item);
+    });
+  },
+
+  runPaletteCommand(cmd) {
+    this.closeCommandPalette();
+    setTimeout(() => { try { cmd.run(); } catch (e) { /* ignore */ } }, 80);
+  },
+
+  bindCommandPalette() {
+    const input = document.getElementById('palette-input');
+    const overlay = document.getElementById('palette-overlay');
+    if (!input || !overlay) return;
+
+    input.addEventListener('input', () => {
+      this.paletteSelectedIndex = 0;
+      this.renderPaletteResults(input.value);
+    });
+    input.addEventListener('keydown', (event) => {
+      const list = this.paletteFiltered || [];
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.closeCommandPalette();
+      } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.paletteSelectedIndex = Math.min(list.length - 1, this.paletteSelectedIndex + 1);
+        this.renderPaletteResults(input.value);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.paletteSelectedIndex = Math.max(0, this.paletteSelectedIndex - 1);
+        this.renderPaletteResults(input.value);
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        const cmd = list[this.paletteSelectedIndex];
+        if (cmd) this.runPaletteCommand(cmd);
+      }
+    });
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) this.closeCommandPalette();
+    });
+    const opener = document.getElementById('palette-open');
+    if (opener) opener.addEventListener('click', () => this.openCommandPalette());
+  },
+
+  // ===================== STEP PLAYBACK =====================
+
+  startPlayback() {
+    const items = document.querySelectorAll('#steps-container .step-item');
+    if (items.length === 0) return;
+    if (this._playbackTimer) this.stopPlayback();
+
+    items.forEach(it => it.classList.add('dimmed'));
+    this._playbackIndex = 0;
+    this._setPlaybackPlaying(true);
+    this._tickPlayback();
+  },
+
+  _tickPlayback() {
+    const items = document.querySelectorAll('#steps-container .step-item');
+    items.forEach(it => it.classList.remove('now-playing'));
+    if (this._playbackIndex >= items.length) {
+      this.stopPlayback(true);
+      return;
+    }
+    const current = items[this._playbackIndex];
+    current.classList.remove('dimmed');
+    current.classList.add('now-playing');
+    current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const fill = document.getElementById('steps-progress-fill');
+    if (fill) fill.style.width = `${((this._playbackIndex + 1) / items.length) * 100}%`;
+
+    const speed = parseInt(document.getElementById('playback-speed').value || '800', 10);
+    this._playbackTimer = setTimeout(() => {
+      this._playbackIndex++;
+      this._tickPlayback();
+    }, speed);
+  },
+
+  pausePlayback() {
+    if (this._playbackTimer) {
+      clearTimeout(this._playbackTimer);
+      this._playbackTimer = null;
+    }
+    this._setPlaybackPlaying(false);
+  },
+
+  stopPlayback(reachedEnd) {
+    if (this._playbackTimer) clearTimeout(this._playbackTimer);
+    this._playbackTimer = null;
+    this._playbackIndex = 0;
+    document.querySelectorAll('#steps-container .step-item').forEach(it => {
+      it.classList.remove('dimmed', 'now-playing');
+    });
+    const fill = document.getElementById('steps-progress-fill');
+    if (fill) fill.style.width = reachedEnd ? '100%' : '0%';
+    this._setPlaybackPlaying(false);
+  },
+
+  stepForwardPlayback() {
+    const items = document.querySelectorAll('#steps-container .step-item');
+    if (items.length === 0) return;
+    if (this._playbackIndex === undefined) {
+      items.forEach(it => it.classList.add('dimmed'));
+      this._playbackIndex = 0;
+    } else if (this._playbackTimer) {
+      this.pausePlayback();
+    }
+    if (this._playbackIndex < items.length) {
+      const cur = items[this._playbackIndex];
+      cur.classList.remove('dimmed');
+      cur.classList.add('now-playing');
+      const fill = document.getElementById('steps-progress-fill');
+      if (fill) fill.style.width = `${((this._playbackIndex + 1) / items.length) * 100}%`;
+      this._playbackIndex++;
+      setTimeout(() => cur.classList.remove('now-playing'), 600);
+    }
+  },
+
+  _setPlaybackPlaying(playing) {
+    const playIcon = document.querySelector('#playback-toggle .play-icon');
+    const pauseIcon = document.querySelector('#playback-toggle .pause-icon');
+    if (!playIcon || !pauseIcon) return;
+    playIcon.classList.toggle('hidden', !!playing);
+    pauseIcon.classList.toggle('hidden', !playing);
+  },
+
+  bindPlaybackControls() {
+    const toggle = document.getElementById('playback-toggle');
+    const stop = document.getElementById('playback-restart');
+    const step = document.getElementById('playback-step');
+    if (!toggle) return;
+    toggle.addEventListener('click', () => {
+      if (this._playbackTimer) this.pausePlayback();
+      else this.startPlayback();
+    });
+    if (stop) stop.addEventListener('click', () => this.stopPlayback());
+    if (step) step.addEventListener('click', () => this.stepForwardPlayback());
+  },
+
+  // ===================== EXPORT MODAL =====================
+
+  openExportModal() {
+    if (this.lastResult === null) {
+      this.showError('Evaluate a formula first to export it.');
+      return;
+    }
+    const overlay = document.getElementById('export-overlay');
+    overlay.classList.remove('hidden');
+    overlay.setAttribute('aria-hidden', 'false');
+    this._exportFormat = 'latex';
+    document.querySelectorAll('.export-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.format === 'latex');
+    });
+    this.refreshExportOutput();
+  },
+
+  closeExportModal() {
+    const overlay = document.getElementById('export-overlay');
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-hidden', 'true');
+  },
+
+  refreshExportOutput() {
+    const fmt = this._exportFormat || 'latex';
+    const out = document.getElementById('export-output');
+    if (!out) return;
+    out.value = this.buildExportText(fmt);
+  },
+
+  buildExportText(fmt) {
+    const formula = document.getElementById('formula-input').value.trim();
+    const r = this.lastResult;
+    if (r === null) return '';
+    const m = this.m;
+    const mod = polyStr(this.irr);
+
+    if (fmt === 'latex') {
+      const lines = [];
+      lines.push(`% GF(2^${m}) computation`);
+      lines.push(`% Modulus: ${mod}`);
+      lines.push('');
+      lines.push(`\\begin{aligned}`);
+      lines.push(`  \\text{Field: } & \\mathrm{GF}(2^{${m}}) \\\\`);
+      lines.push(`  \\text{Modulus: } & p(x) = ${this.polyToLatex(this.irr)} \\\\`);
+      lines.push(`  \\text{Formula: } & ${this.formulaToLatex(formula)} \\\\`);
+      lines.push(`  \\text{Result: } & ${this.polyToLatex(r)} \\\\`);
+      lines.push(`  & = \\mathtt{${toBin(r)}_2} = \\mathtt{0x${toHex(r)}}`);
+      lines.push(`\\end{aligned}`);
+      return lines.join('\n');
+    }
+
+    if (fmt === 'markdown') {
+      const lines = [];
+      lines.push(`### GF(2^${m}) calculation`);
+      lines.push('');
+      lines.push(`- **Modulus**: $p(x) = ${this.polyToLatex(this.irr)}$`);
+      lines.push(`- **Formula**: $${this.formulaToLatex(formula)}$`);
+      lines.push(`- **Result**: $${this.polyToLatex(r)}$`);
+      lines.push(`- **Bin**: \`${toBin(r)}\``);
+      lines.push(`- **Hex**: \`0x${toHex(r)}\``);
+      return lines.join('\n');
+    }
+
+    // plain text
+    const lines = [];
+    lines.push(`GF(2^${m}) calculation`);
+    lines.push(`Modulus: p(x) = ${mod}`);
+    lines.push(`Formula: ${formula}`);
+    lines.push(`Result: ${polyStr(r)}`);
+    lines.push(`  Bin: ${toBin(r)}`);
+    lines.push(`  Hex: 0x${toHex(r)}`);
+    return lines.join('\n');
+  },
+
+  polyToLatex(p) {
+    if (p === 0n) return '0';
+    const terms = [];
+    const d = degree(p);
+    for (let i = d; i >= 0; i--) {
+      if (p & (1n << BigInt(i))) {
+        if (i === 0) terms.push('1');
+        else if (i === 1) terms.push('x');
+        else terms.push(`x^{${i}}`);
+      }
+    }
+    return terms.join(' + ');
+  },
+
+  formulaToLatex(formula) {
+    if (!formula) return '?';
+    return formula
+      .replace(/\bxor\b/gi, ' \\oplus ')
+      .replace(/\*/g, ' \\cdot ')
+      .replace(/\//g, ' / ')
+      .replace(/\binv\(/g, '(\\,')
+      .replace(/\^(\d+)/g, '^{$1}');
+  },
+
+  bindExportModal() {
+    const close = document.getElementById('export-close');
+    const overlay = document.getElementById('export-overlay');
+    const copy = document.getElementById('export-copy');
+    if (close) close.addEventListener('click', () => this.closeExportModal());
+    if (overlay) overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) this.closeExportModal();
+    });
+    document.querySelectorAll('.export-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.export-tab').forEach(t => t.classList.toggle('active', t === tab));
+        this._exportFormat = tab.dataset.format;
+        this.refreshExportOutput();
+      });
+    });
+    if (copy) copy.addEventListener('click', async () => {
+      const out = document.getElementById('export-output');
+      try {
+        await navigator.clipboard.writeText(out.value);
+        copy.textContent = 'Copied ✓';
+        setTimeout(() => copy.textContent = 'Copy to clipboard', 1200);
+      } catch (e) {
+        out.select();
+      }
+    });
+  },
+
+  // ===================== STICKY RESULT CHIP =====================
+
+  bindStickyChip() {
+    const chip = document.getElementById('sticky-chip');
+    const valEl = document.getElementById('sticky-value');
+    const result = document.getElementById('result-section');
+    if (!chip || !result) return;
+
+    chip.addEventListener('click', () => {
+      result.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    if (!('IntersectionObserver' in window)) return;
+    const observer = new IntersectionObserver((entries) => {
+      const e = entries[0];
+      if (this.lastResult === null || result.classList.contains('hidden')) {
+        chip.classList.add('hidden');
+        return;
+      }
+      if (e.intersectionRatio < 0.1) {
+        valEl.textContent = this.formatValue(this.lastResult, this.resultFormat) || polyStr(this.lastResult);
+        chip.classList.remove('hidden');
+      } else {
+        chip.classList.add('hidden');
+      }
+    }, { threshold: [0, 0.1, 0.5] });
+    observer.observe(result);
+  },
+
+  // ===================== FIELD TABLES (heatmap + discrete log) =====================
+
+  renderFieldTables() {
+    const container = document.getElementById('tables-container');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const heatmapMaxM = 5;
+    const logMaxM = 12;
+
+    if (this.m > heatmapMaxM && this.m > logMaxM) {
+      const note = document.createElement('div');
+      note.className = 'tables-empty';
+      note.textContent = `Field tables aren't shown for m=${this.m}. Switch to a smaller field (m ≤ ${logMaxM}) to see them.`;
+      container.appendChild(note);
+      return;
+    }
+
+    if (this.m <= heatmapMaxM) {
+      container.appendChild(this.buildHeatmap('mul'));
+      container.appendChild(this.buildHeatmap('add'));
+    } else {
+      const note = document.createElement('div');
+      note.className = 'tables-empty';
+      note.textContent = `Heatmaps are shown for m ≤ ${heatmapMaxM} (m=${this.m} would have ${1 << this.m}×${1 << this.m} cells).`;
+      container.appendChild(note);
+    }
+
+    if (this.m <= logMaxM) {
+      container.appendChild(this.buildDiscreteLogPanel());
+    }
+  },
+
+  buildHeatmap(kind) {
+    const N = 1 << this.m;
+    const wrap = document.createElement('div');
+    wrap.className = 'op-heatmap';
+
+    const header = document.createElement('div');
+    header.className = 'op-heatmap-header';
+    const title = document.createElement('div');
+    title.className = 'op-heatmap-title';
+    const sym = document.createElement('span');
+    sym.className = 'op-symbol';
+    sym.textContent = kind === 'mul' ? '×' : '⊕';
+    title.append(sym);
+    title.appendChild(document.createTextNode(kind === 'mul' ? 'Multiplication table (mod p)' : 'Addition / XOR table'));
+    const hint = document.createElement('div');
+    hint.className = 'op-heatmap-hint';
+    hint.textContent = 'Click a cell to load A and B';
+    header.append(title, hint);
+    wrap.appendChild(header);
+
+    const grid = document.createElement('div');
+    grid.className = 'op-heatmap-grid';
+    const size = N + 1; // +1 for header row/column
+    grid.style.gridTemplateColumns = `repeat(${size}, minmax(14px, 1fr))`;
+
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'op-heatmap-cell';
+
+        if (r === 0 && c === 0) {
+          cell.classList.add('corner');
+          cell.textContent = kind === 'mul' ? '×' : '⊕';
+        } else if (r === 0) {
+          cell.classList.add('header');
+          cell.textContent = (c - 1).toString(16).toUpperCase();
+        } else if (c === 0) {
+          cell.classList.add('header');
+          cell.textContent = (r - 1).toString(16).toUpperCase();
+        } else {
+          const a = BigInt(r - 1);
+          const b = BigInt(c - 1);
+          let v;
+          if (kind === 'mul') {
+            v = (a === 0n || b === 0n) ? 0n : reduceSimple(mulRaw(a, b), this.irr);
+          } else {
+            v = a ^ b;
+          }
+          const vNum = Number(v);
+          cell.textContent = vNum.toString(16).toUpperCase();
+          cell.title = `${a.toString(16).toUpperCase()} ${kind === 'mul' ? '×' : '⊕'} ${b.toString(16).toUpperCase()} = ${vNum.toString(16).toUpperCase()}  (poly: ${polyStr(v)})`;
+          if (v === 0n) cell.classList.add('zero');
+          // Color by value: hue rotation across full range
+          const hue = (vNum / Math.max(N, 1)) * 320;
+          const sat = v === 0n ? 0 : 70;
+          const light = v === 0n ? 22 : 36;
+          cell.style.backgroundColor = `hsl(${hue}, ${sat}%, ${light}%)`;
+          cell.addEventListener('click', () => this.loadOperandsToVariables(a, b, kind));
+        }
+        grid.appendChild(cell);
+      }
+    }
+    wrap.appendChild(grid);
+    return wrap;
+  },
+
+  loadOperandsToVariables(a, b, kind) {
+    const ensureVar = (name, format) => {
+      if (!this.variableNames.includes(name)) this.addVariable(name, format);
+      const row = this.getVariableRow(name);
+      if (row && row.dataset.format !== format) this.setVariableFormat(name, format);
+      const inp = this.getVariableValueInput(name);
+      return inp;
+    };
+    const inpA = ensureVar('A', 'hex');
+    const inpB = ensureVar('B', 'hex');
+    inpA.value = a.toString(16).toUpperCase();
+    inpB.value = b.toString(16).toUpperCase();
+    this.updateVariablePreview('A');
+    this.updateVariablePreview('B');
+    document.getElementById('formula-input').value = kind === 'mul' ? 'A * B' : 'A xor B';
+    this.recordFormulaHistory();
+  },
+
+  buildDiscreteLogPanel() {
+    const wrap = document.createElement('div');
+    wrap.className = 'log-panel';
+
+    const N = (1n << BigInt(this.m)) - 1n;
+    const factors = primeFactorsBigInt(N);
+    const xOrder = orderOfX(this.m, this.irr, factors);
+    let g, primFromX;
+    if (xOrder === N) {
+      g = 2n;
+      primFromX = true;
+    } else {
+      g = findPrimitiveElement(this.m, this.irr, factors);
+      primFromX = false;
+    }
+
+    const header = document.createElement('div');
+    header.className = 'log-panel-header';
+    const title = document.createElement('div');
+    title.className = 'log-panel-title';
+    title.textContent = 'Discrete log table';
+    const info = document.createElement('div');
+    info.className = 'log-panel-info';
+    if (g === null) {
+      info.textContent = 'no primitive element found in this field';
+    } else {
+      info.textContent = `g = ${polyStr(g)} (${primFromX ? 'x is primitive' : 'first primitive element'}), |F*| = ${N.toString()}`;
+    }
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.className = 'log-search';
+    search.placeholder = 'Find by hex, bin, or k...';
+    search.autocomplete = 'off';
+    header.append(title, info, search);
+    wrap.appendChild(header);
+
+    if (g === null) return wrap;
+
+    // Build the table: gPow[k] = g^k for k = 0..N-1
+    const grid = document.createElement('div');
+    grid.className = 'log-grid';
+    const entries = [];
+    let power = 1n;
+    for (let k = 0n; k < N; k++) {
+      const valHex = power.toString(16).toUpperCase();
+      const valPoly = polyStr(power);
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.dataset.hex = valHex;
+      entry.dataset.bin = power.toString(2);
+      entry.dataset.k = k.toString();
+      entry.title = `g^${k} = ${valHex} (${valPoly})`;
+      const keySpan = document.createElement('span');
+      keySpan.className = 'log-key';
+      keySpan.textContent = `g^${k}`;
+      const arrow = document.createElement('span');
+      arrow.className = 'log-arrow';
+      arrow.textContent = '=';
+      const valSpan = document.createElement('span');
+      valSpan.className = 'log-value';
+      valSpan.textContent = valHex.length <= 4 ? `${valHex}h ${valPoly}` : valHex + 'h';
+      entry.append(keySpan, arrow, valSpan);
+      entry.addEventListener('click', () => {
+        this.loadOperandsToVariables(power, power, 'mul');
+        document.getElementById('formula-input').value = 'A';
+        this.updateFormulaPreview();
+      });
+      entries.push(entry);
+      grid.appendChild(entry);
+      power = reduceSimple(mulRaw(power, g), this.irr);
+    }
+    wrap.appendChild(grid);
+
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      let visible = 0;
+      for (const e of entries) {
+        const matches = q === '' ||
+          e.dataset.hex.toLowerCase().includes(q) ||
+          e.dataset.bin.includes(q) ||
+          ('g^' + e.dataset.k).includes(q) ||
+          e.dataset.k === q;
+        e.style.display = matches ? '' : 'none';
+        if (matches) visible++;
+      }
+      info.textContent = q
+        ? `${visible} match${visible === 1 ? '' : 'es'}`
+        : `g = ${polyStr(g)} (${primFromX ? 'x is primitive' : 'first primitive element'}), |F*| = ${N.toString()}`;
+    });
+
+    return wrap;
+  },
+
+  // ===================== SHAREABLE URL =====================
+
+  encodeShareState() {
+    const state = {
+      v: 1,
+      m: this.m,
+      irr: this.irr.toString(16),
+      f: document.getElementById('formula-input').value,
+      r: this.resultFormat,
+      vars: this.variableNames.map(name => ({
+        n: name,
+        f: this.getVariableFormat(name),
+        v: (this.getVariableValueInput(name) || { value: '' }).value
+      }))
+    };
+    const json = JSON.stringify(state);
+    const b64 = btoa(unescape(encodeURIComponent(json)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    return b64;
+  },
+
+  decodeShareState(s) {
+    try {
+      let b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      const json = decodeURIComponent(escape(atob(b64)));
+      return JSON.parse(json);
+    } catch (e) {
+      return null;
+    }
+  },
+
+  shareWorkspace() {
+    const code = this.encodeShareState();
+    const url = `${window.location.origin}${window.location.pathname}#s=${code}`;
+    const writeClipboard = (text) => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+      }
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      return Promise.resolve();
+    };
+    writeClipboard(url).then(
+      () => this.showShareToast('Link copied to clipboard'),
+      () => {
+        // If clipboard fails, just update the address bar
+        try { window.history.replaceState({}, '', `#s=${code}`); } catch (e) {}
+        this.showShareToast('Link is in the address bar');
+      }
+    );
+    try { window.history.replaceState({}, '', `#s=${code}`); } catch (e) {}
+  },
+
+  showShareToast(msg) {
+    const toast = document.getElementById('share-toast');
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.classList.add('visible');
+    if (this._toastTimer) clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => toast.classList.remove('visible'), 1800);
+  },
+
+  loadFromUrlHash() {
+    const hash = window.location.hash || '';
+    const match = hash.match(/^#s=([A-Za-z0-9_\-]+)/);
+    if (!match) return false;
+    const data = this.decodeShareState(match[1]);
+    if (!data) return false;
+    this.applyState({
+      m: data.m,
+      irrHex: data.irr,
+      formula: data.f,
+      resultFormat: data.r,
+      variables: Array.isArray(data.vars)
+        ? data.vars.map(v => ({ name: v.n, format: v.f, value: v.v }))
+        : []
+    });
+    return true;
+  }
+
 };
 
 // ===================== INIT =====================

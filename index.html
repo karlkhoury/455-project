@@ -11,6 +11,15 @@
 <body>
   <div class="app">
     <header>
+      <div class="header-bar">
+        <button class="header-icon-btn" id="palette-open" type="button" title="Command palette (Ctrl+K)" aria-label="Open command palette">
+          <span class="kbd-hint">&#x2318;K</span>
+        </button>
+        <button class="theme-toggle" id="theme-toggle" type="button" title="Toggle light / dark theme" aria-label="Toggle theme">
+          <span class="icon-sun">&#x2600;</span>
+          <span class="icon-moon">&#x263E;</span>
+        </button>
+      </div>
       <h1>GF(2<sup>m</sup>) Polynomial Arithmetic</h1>
       <p class="subtitle">EECE 455/632 &mdash; Cryptography &amp; Network Security</p>
     </header>
@@ -24,61 +33,110 @@
           <input type="number" id="degree-input" class="hidden" min="2" max="571" value="8" title="Custom degree (2-571)">
         </div>
       </div>
+      <div class="workspace-actions">
+        <button class="icon-btn" id="workspace-share" type="button" title="Copy a shareable URL of the current workspace">&#x1F517; Share</button>
+        <button class="icon-btn" id="workspace-export" type="button" title="Download current workspace as JSON">&#x2B07; Export</button>
+        <button class="icon-btn" id="workspace-import" type="button" title="Load workspace from JSON file">&#x2B06; Import</button>
+      </div>
     </section>
 
     <!-- Irreducible Polynomial -->
-    <section class="irr-section">
-      <div class="irr-header">
+    <section class="irr-section collapsible-section">
+      <div class="irr-header collapsible-header">
+        <button class="collapse-toggle" data-target="irr-body" type="button" title="Collapse / expand">&#x25BC;</button>
         <span class="irr-label">Modulus Polynomial</span>
-        <button class="icon-btn" id="irr-reset" title="Reset to standard or generated modulus">&#x21BA; Reset</button>
+        <button class="icon-btn" id="irr-reset" title="Reset to standard or generated modulus" type="button">&#x21BA; Reset</button>
       </div>
-      <div class="modulus-dropdown" id="modulus-dropdown">
-        <button class="modulus-dropdown-btn" id="modulus-dropdown-btn" type="button"></button>
-        <div class="modulus-dropdown-menu hidden" id="modulus-dropdown-menu"></div>
+      <div class="collapsible-body" id="irr-body">
+        <div class="modulus-dropdown" id="modulus-dropdown">
+          <button class="modulus-dropdown-btn" id="modulus-dropdown-btn" type="button"></button>
+          <div class="modulus-dropdown-menu hidden" id="modulus-dropdown-menu"></div>
+        </div>
+        <div class="irr-preview" id="irr-preview"></div>
+        <div class="custom-modulus-row">
+          <input type="text" class="irr-input" id="irr-input" spellcheck="false" autocomplete="off">
+          <button class="eval-btn" id="irr-custom" type="button">Use Custom</button>
+        </div>
+        <div class="field-note">Different irreducible polynomials of the same degree define isomorphic fields, but bit-level multiplication, inverses, and division results may differ.</div>
+        <div class="irr-error" id="irr-error"></div>
+        <div class="field-stats" id="field-stats"></div>
       </div>
-      <div class="irr-preview" id="irr-preview"></div>
-      <div class="custom-modulus-row">
-        <input type="text" class="irr-input" id="irr-input" spellcheck="false" autocomplete="off">
-        <button class="eval-btn" id="irr-custom" type="button">Use Custom</button>
-      </div>
-      <div class="field-note">Different irreducible polynomials of the same degree define isomorphic fields, but bit-level multiplication, inverses, and division results may differ.</div>
-      <div class="irr-error" id="irr-error"></div>
     </section>
 
     <!-- Formula Variables -->
-    <section class="variables-section">
-      <div class="section-heading">
+    <section class="variables-section collapsible-section">
+      <div class="section-heading collapsible-header">
+        <button class="collapse-toggle" data-target="variables-body" type="button" title="Collapse / expand">&#x25BC;</button>
         <span>Formula Variables</span>
+        <span class="section-hint">Drag rows to reorder</span>
       </div>
-      <div class="variables-list" id="variables-list"></div>
-      <button class="add-variable-btn" id="add-variable" type="button">
-        <span>+</span> Add Variable
-      </button>
+      <div class="collapsible-body" id="variables-body">
+        <div class="variables-list" id="variables-list"></div>
+        <button class="add-variable-btn" id="add-variable" type="button">
+          <span>+</span> Add Variable
+        </button>
+      </div>
+    </section>
+
+    <!-- Quick Converter -->
+    <section class="converter-section collapsible-section collapsed">
+      <div class="section-heading collapsible-header">
+        <button class="collapse-toggle" data-target="converter-body" type="button" title="Collapse / expand">&#x25BC;</button>
+        <span>Quick Converter</span>
+        <span class="section-hint">Edit any field, the others sync</span>
+      </div>
+      <div class="collapsible-body" id="converter-body">
+        <div class="converter-grid">
+          <label class="converter-cell">
+            <span>Binary</span>
+            <input type="text" id="conv-bin" autocomplete="off" spellcheck="false" placeholder="10110011">
+          </label>
+          <label class="converter-cell">
+            <span>Hex</span>
+            <input type="text" id="conv-hex" autocomplete="off" spellcheck="false" placeholder="B3">
+          </label>
+          <label class="converter-cell">
+            <span>Polynomial</span>
+            <input type="text" id="conv-poly" autocomplete="off" spellcheck="false" placeholder="x^7 + x^5 + x^4 + x + 1">
+          </label>
+          <label class="converter-cell">
+            <span>Decimal</span>
+            <input type="text" id="conv-dec" autocomplete="off" spellcheck="false" placeholder="179">
+          </label>
+        </div>
+        <div class="converter-info" id="conv-info"></div>
+      </div>
     </section>
 
     <!-- Formula Constructor -->
-    <section class="formula-section">
-      <div class="section-heading">
+    <section class="formula-section collapsible-section">
+      <div class="section-heading collapsible-header">
+        <button class="collapse-toggle" data-target="formula-body" type="button" title="Collapse / expand">&#x25BC;</button>
         <span>Formula Constructor</span>
         <div class="formula-actions">
-          <button class="icon-btn formula-tool-btn" id="formula-undo" title="Undo formula edit" type="button">&#x21B6;</button>
-          <button class="icon-btn formula-tool-btn" id="formula-redo" title="Redo formula edit" type="button">&#x21B7;</button>
+          <button class="icon-btn formula-tool-btn" id="formula-undo" title="Undo formula edit (Ctrl+Z)" type="button">&#x21B6;</button>
+          <button class="icon-btn formula-tool-btn" id="formula-redo" title="Redo formula edit (Ctrl+Y)" type="button">&#x21B7;</button>
           <button class="icon-btn formula-tool-btn" id="formula-paste" title="Paste into formula" type="button">Paste</button>
           <div class="mini-format-toggle" id="result-format-toggle" title="Result format">
             <button class="active" data-format="bin" type="button">Bin.</button>
             <button data-format="hex" type="button">Hex</button>
             <button data-format="poly" type="button">Poly</button>
           </div>
-          <button class="icon-btn" id="formula-clear" title="Clear formula">Clear</button>
+          <button class="icon-btn" id="formula-clear" title="Clear formula (Ctrl+L)">Clear</button>
         </div>
       </div>
-      <div class="formula-row">
-        <input type="text" id="formula-input" autocomplete="off" spellcheck="false" placeholder="e.g. (A + B) * inv(C)">
-        <button class="eval-btn" id="formula-eval">Evaluate</button>
+      <div class="collapsible-body" id="formula-body">
+        <div class="formula-row">
+          <input type="text" id="formula-input" autocomplete="off" spellcheck="false" placeholder="e.g. (A + B) * inv(C), or A^5 + B^3">
+          <button class="eval-btn" id="formula-eval" title="Evaluate (Ctrl+Enter)">Evaluate</button>
+        </div>
+        <div class="formula-toolbar"></div>
+        <div class="formula-hint">
+          Operators: <code>+</code> <code>xor</code> <code>*</code> <code>/</code> <code>^</code> &middot; functions: <code>inv(...)</code> &middot; literals: <code>0b1011</code>, <code>0xAF</code>, <code>[x^3+x+1]</code> &middot; shortcuts: <kbd>Ctrl</kbd>+<kbd>Enter</kbd> evaluate, <kbd>Ctrl</kbd>+<kbd>L</kbd> clear, <kbd>Ctrl</kbd>+<kbd>K</kbd> palette, <kbd>Esc</kbd> close result
+        </div>
+        <div class="formula-preview" id="formula-preview">Use your variables with +, xor, *, /, ^, inv(...), and parentheses.</div>
+        <div class="formula-error" id="formula-error"></div>
       </div>
-      <div class="formula-toolbar"></div>
-      <div class="formula-preview" id="formula-preview">Use your variables with +, xor, *, /, inv(...), and parentheses.</div>
-      <div class="formula-error" id="formula-error"></div>
     </section>
 
     <!-- Result Display -->
@@ -86,19 +144,85 @@
       <div class="result-header">
         <h3 id="result-title">Result</h3>
         <div class="result-actions">
-          <button class="small-btn" id="copy-result" title="Copy displayed result">Copy</button>
-          <button class="small-btn" id="use-as-var" title="Copy result into a new variable">&#x2192; Variable</button>
+          <button class="small-btn" id="toggle-bit-viz" title="Toggle bit-by-bit visualization" type="button">Bits</button>
+          <button class="small-btn" id="copy-result" title="Copy displayed result" type="button">Copy</button>
+          <button class="small-btn" id="export-result" title="Export as LaTeX / Markdown" type="button">Export</button>
+          <button class="small-btn" id="pin-result" title="Pin this result for comparison" type="button">&#x2605; Pin</button>
+          <button class="small-btn" id="use-as-var" title="Save result as a new variable" type="button">&#x2192; Variable</button>
         </div>
       </div>
       <div class="result-value" id="result-value"></div>
       <div class="result-poly" id="result-poly"></div>
       <div class="result-alt" id="result-alt"></div>
+      <div class="bit-viz hidden" id="bit-viz" aria-label="Bit-by-bit polynomial visualization"></div>
     </section>
 
     <!-- Step-by-Step Breakdown -->
-    <section class="steps-section hidden" id="steps-section">
-      <h3>Step-by-Step Breakdown</h3>
-      <div class="steps-timeline" id="steps-container"></div>
+    <section class="steps-section collapsible-section hidden" id="steps-section">
+      <div class="section-heading collapsible-header">
+        <button class="collapse-toggle" data-target="steps-body" type="button" title="Collapse / expand">&#x25BC;</button>
+        <span>Step-by-Step Breakdown</span>
+        <div class="playback-controls">
+          <button class="playback-btn" id="playback-restart" type="button" title="Restart playback">&#x21BA;</button>
+          <button class="playback-btn primary" id="playback-toggle" type="button" title="Play / pause">
+            <span class="play-icon">&#x25B6;</span>
+            <span class="pause-icon hidden">&#x23F8;</span>
+          </button>
+          <button class="playback-btn" id="playback-step" type="button" title="Step forward">&#x23ED;</button>
+          <select class="playback-speed" id="playback-speed" title="Playback speed">
+            <option value="1500">0.5×</option>
+            <option value="800" selected>1×</option>
+            <option value="400">2×</option>
+            <option value="200">4×</option>
+          </select>
+        </div>
+      </div>
+      <div class="collapsible-body" id="steps-body">
+        <div class="steps-progress" id="steps-progress">
+          <div class="steps-progress-fill" id="steps-progress-fill"></div>
+        </div>
+        <div class="steps-timeline" id="steps-container"></div>
+      </div>
+    </section>
+
+    <!-- Operation Tables (heatmaps) and Discrete Log -->
+    <section class="tables-section collapsible-section collapsed" id="tables-section">
+      <div class="section-heading collapsible-header">
+        <button class="collapse-toggle" data-target="tables-body" type="button" title="Collapse / expand">&#x25BC;</button>
+        <span>Field Tables</span>
+        <span class="section-hint" id="tables-hint">Heatmaps for m &le; 5 &middot; log table for m &le; 12</span>
+      </div>
+      <div class="collapsible-body" id="tables-body">
+        <div class="tables-container" id="tables-container"></div>
+      </div>
+    </section>
+
+    <!-- Pinned Results -->
+    <section class="pinned-section collapsible-section" id="pinned-section">
+      <div class="section-heading collapsible-header">
+        <button class="collapse-toggle" data-target="pinned-body" type="button" title="Collapse / expand">&#x25BC;</button>
+        <span>Pinned Results</span>
+        <div class="pinned-top-actions">
+          <button class="icon-btn" id="pinned-clear" type="button" title="Remove all pinned results">Clear all</button>
+        </div>
+      </div>
+      <div class="collapsible-body" id="pinned-body">
+        <div class="pinned-list" id="pinned-list"></div>
+      </div>
+    </section>
+
+    <!-- Calculation History -->
+    <section class="history-section collapsible-section" id="history-section">
+      <div class="section-heading collapsible-header">
+        <button class="collapse-toggle" data-target="history-body" type="button" title="Collapse / expand">&#x25BC;</button>
+        <span>Calculation History</span>
+        <div class="history-top-actions">
+          <button class="icon-btn" id="history-clear" type="button" title="Delete all history entries">Clear all</button>
+        </div>
+      </div>
+      <div class="collapsible-body" id="history-body">
+        <div class="history-list" id="history-list"></div>
+      </div>
     </section>
 
     <footer>
@@ -106,6 +230,45 @@
     </footer>
   </div>
 
+  <!-- Sticky result chip (appears when scrolled past result) -->
+  <button class="sticky-chip hidden" id="sticky-chip" type="button" title="Jump to result">
+    <span class="sticky-label">Result</span>
+    <span class="sticky-value" id="sticky-value"></span>
+  </button>
+
+  <!-- Command palette overlay -->
+  <div class="palette-overlay hidden" id="palette-overlay" aria-hidden="true">
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <input class="palette-input" id="palette-input" type="text" placeholder="Type a command or search..." autocomplete="off" spellcheck="false">
+      <div class="palette-results" id="palette-results"></div>
+      <div class="palette-hint">
+        <kbd>&uarr;</kbd> <kbd>&darr;</kbd> navigate &middot; <kbd>Enter</kbd> run &middot; <kbd>Esc</kbd> close
+      </div>
+    </div>
+  </div>
+
+  <!-- Export modal -->
+  <div class="export-overlay hidden" id="export-overlay" aria-hidden="true">
+    <div class="export-modal" role="dialog" aria-modal="true" aria-label="Export calculation">
+      <div class="export-header">
+        <h3>Export Calculation</h3>
+        <button class="icon-btn" id="export-close" type="button" title="Close">&times;</button>
+      </div>
+      <div class="export-tabs">
+        <button class="export-tab active" data-format="latex" type="button">LaTeX</button>
+        <button class="export-tab" data-format="markdown" type="button">Markdown</button>
+        <button class="export-tab" data-format="text" type="button">Plain text</button>
+      </div>
+      <textarea class="export-output" id="export-output" readonly></textarea>
+      <div class="export-actions">
+        <button class="eval-btn" id="export-copy" type="button">Copy to clipboard</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="share-toast" id="share-toast">Link copied to clipboard</div>
+
+  <input type="file" id="workspace-file-input" class="hidden" accept="application/json,.json">
   <script src="gf_arithmetic.js"></script>
 </body>
 </html>
